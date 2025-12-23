@@ -16,13 +16,12 @@ const App: React.FC = () => {
   const [listeningLang, setListeningLang] = useState<'en-US' | 'zh-CN'>('en-US');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [interimText, setInterimText] = useState('');
-  const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); // 改为 State 以支持 UI 同步
+  const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
   
   const recognitionRef = useRef<any>(null);
   const manualStopRef = useRef(false);
   const isListeningRef = useRef(false); 
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); 
-  // 使用 Ref 同步最新值给回调函数，避免闭包问题
   const pendingLangRef = useRef<'en-US' | 'zh-CN' | null>(null);
 
   useEffect(() => {
@@ -38,31 +37,39 @@ const App: React.FC = () => {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
+      // 优化移动端性能，不需要多个候选结果
+      recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
         setIsListening(true);
         isListeningRef.current = true;
-        setPendingLang(null); // 启动成功，清除等待状态
+        setPendingLang(null);
         setErrorMsg(null);
       };
 
       recognition.onend = () => {
-        // 核心逻辑：如果存在待处理的切换请求
+        // 如果有待处理的语言切换，优先处理
         if (pendingLangRef.current) {
           const nextLang = pendingLangRef.current;
-          // 注意：不要在这里直接 setPendingLang(null)，在 startListening 的 onstart 里处理
-          startListening(nextLang);
+          // 移动端关键：给浏览器一点时间释放麦克风资源后再开启新会话
+          setTimeout(() => startListening(nextLang), 50);
           return;
         }
 
-        // 如果是由于 0.5s 静默触发的自动停止，且不是手动关闭，则立即重启
+        // 自动重启逻辑
         if (!manualStopRef.current && isListeningRef.current) {
-          try {
-            recognition.start();
-          } catch (e) {
-            setIsListening(false);
-            isListeningRef.current = false;
-          }
+          // 移动端关键：增加微小延迟，解决 iOS 上立即重启导致的 not-allowed 或无响应问题
+          setTimeout(() => {
+            if (!manualStopRef.current && isListeningRef.current) {
+              try {
+                recognition.start();
+              } catch (e) {
+                console.warn('Auto restart failed:', e);
+                setIsListening(false);
+                isListeningRef.current = false;
+              }
+            }
+          }, 100); 
         } else {
           setIsListening(false);
           isListeningRef.current = false;
@@ -73,14 +80,29 @@ const App: React.FC = () => {
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
+        
+        // 忽略移动端常见的非致命错误
+        if (event.error === 'no-speech' || event.error === 'aborted') {
+           // no-speech 时不改变 isListening 状态，依靠 onend 里的逻辑重启
+           return;
+        }
+
         if (event.error === 'not-allowed') {
           setErrorMsg('请允许麦克风权限以使用语音录入');
+          setIsListening(false);
+          isListeningRef.current = false;
+          setPendingLang(null);
         } else if (event.error === 'network') {
           setErrorMsg('网络异常，请检查网络连接');
+          setIsListening(false);
+          isListeningRef.current = false;
+          setPendingLang(null);
+        } else {
+           // 其他错误也停止，防止死循环
+           setIsListening(false);
+           isListeningRef.current = false;
+           setPendingLang(null);
         }
-        setIsListening(false);
-        isListeningRef.current = false;
-        setPendingLang(null);
       };
 
       recognition.onresult = (e: any) => {
@@ -107,9 +129,11 @@ const App: React.FC = () => {
 
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         
+        // 只有当有内容时才启动静默检测
         if (currentInterim.trim() || finalBatch.trim()) {
           silenceTimerRef.current = setTimeout(() => {
             if (isListeningRef.current && !manualStopRef.current && !pendingLangRef.current) {
+              // 强制停止以触发结果提交和重启
               recognition.stop();
             }
           }, 500);
@@ -127,7 +151,11 @@ const App: React.FC = () => {
     if (recognitionRef.current) {
       manualStopRef.current = true;
       isListeningRef.current = false;
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch(e) {
+        console.warn('Stop failed', e);
+      }
       setIsListening(false);
       setInterimText('');
     }
@@ -135,17 +163,14 @@ const App: React.FC = () => {
 
   const toggleListening = (lang: 'en-US' | 'zh-CN') => {
     if (!recognitionRef.current) {
-      alert('您的浏览器暂不支持语音识别功能。');
+      alert('您的浏览器暂不支持语音识别功能。若在 iOS 上，请使用 Safari；Android 请使用 Chrome。');
       return;
     }
 
-    // 如果已经在切换中，再次点击按钮：
     if (pendingLang !== null) {
       if (pendingLang === lang) {
-        // 点击当前正在尝试切换的语言 -> 取消切换并停止
         stopListening();
       } else {
-        // 点击另一个语言 -> 更新切换目标
         setPendingLang(lang);
         setListeningLang(lang);
       }
@@ -154,15 +179,18 @@ const App: React.FC = () => {
 
     if (isListening) {
       if (listeningLang === lang) {
-        // 点击当前正在录入的语言 -> 停止
         stopListening();
       } else {
-        // 点击另一个语言 -> 启动切换流程
         manualStopRef.current = true;
         isListeningRef.current = false;
         setPendingLang(lang);
         setListeningLang(lang);
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch(e) {
+          // 如果 stop 失败（可能已经停止），手动触发重启逻辑
+          startListening(lang);
+        }
         setInterimText('正在准备切换...');
       }
       return;
@@ -177,14 +205,24 @@ const App: React.FC = () => {
     manualStopRef.current = false;
     isListeningRef.current = true;
     setListeningLang(lang);
+    
+    // 确保之前的定时器被清除
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    // 某些浏览器需要重新设置 lang
     recognitionRef.current.lang = lang;
+    
     try {
       recognitionRef.current.start();
     } catch (e) {
       console.error('Start failed', e);
-      isListeningRef.current = false;
-      setIsListening(false);
-      setPendingLang(null);
+      // 这里的错误通常意味着已经在运行中或状态不对，不做处理，依赖 onend/onerror 修正
+      if ((e as any)?.name === 'NotAllowedError') {
+         setErrorMsg('无法访问麦克风，请检查权限设置');
+         setIsListening(false);
+         isListeningRef.current = false;
+         setPendingLang(null);
+      }
     }
   };
 
