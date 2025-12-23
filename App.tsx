@@ -3,30 +3,52 @@ import React, { useState, useEffect } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
+import { Plus, Mic, Key, AlertTriangle } from 'lucide-react';
+
+// Define AIStudio interface for global window augmentation
+interface AIStudio {
+  hasSelectedApiKey: () => Promise<boolean>;
+  openSelectKey: () => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    // Making aistudio optional to fix "identical modifiers" error and reflect its potential absence
+    aistudio?: AIStudio;
+  }
+}
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingList, setEditingList] = useState<WordList | null>(null);
   const [currentStudyListId, setCurrentStudyListId] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState<boolean>(true);
   
-  // Form state
   const [listName, setListName] = useState('');
   const [wordsInput, setWordsInput] = useState('');
 
-  // Load persistence
+  useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio?.hasSelectedApiKey) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasKey(selected);
+      }
+    };
+    checkKey();
+  }, []);
+
   useEffect(() => {
     const saved = localStorage.getItem('lingo-echo-lists');
     if (saved) {
       try {
         setLists(JSON.parse(saved));
       } catch (e) {
-        console.error("Failed to parse saved lists");
+        console.error("Failed to load saved lists");
       }
     }
   }, []);
 
-  // Save persistence
   useEffect(() => {
     localStorage.setItem('lingo-echo-lists', JSON.stringify(lists));
   }, [lists]);
@@ -64,12 +86,11 @@ const App: React.FC = () => {
       };
       setLists(prev => [newList, ...prev]);
     }
-
     setIsModalOpen(false);
   };
 
   const handleDeleteList = (id: string) => {
-    if (window.confirm('Delete this list?')) {
+    if (window.confirm('Are you sure you want to delete this list?')) {
       setLists(prev => prev.filter(l => l.id !== id));
     }
   };
@@ -78,56 +99,98 @@ const App: React.FC = () => {
     setCurrentStudyListId(id);
   };
 
+  const handleConfigKey = async () => {
+    if (window.aistudio?.openSelectKey) {
+      await window.aistudio.openSelectKey();
+      // Assume successful after triggering to avoid race conditions
+      setHasKey(true);
+    }
+  };
+
   const currentStudyList = lists.find(l => l.id === currentStudyListId);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
-      {/* Navbar */}
-      <nav className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center space-x-2">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
+    <div className="min-h-screen pb-20">
+      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+            <Mic className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-800">LingoEcho</h1>
+          <h1 className="text-2xl font-black tracking-tighter text-slate-900">LingoEcho</h1>
         </div>
-        <button 
-          onClick={() => handleOpenModal()}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-all shadow-md hover:shadow-lg flex items-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          <span>New List</span>
-        </button>
+        
+        <div className="flex items-center space-x-3">
+          <button 
+            onClick={handleConfigKey}
+            className={`p-2.5 rounded-xl transition-all border ${
+              hasKey 
+                ? 'text-slate-500 border-slate-200 hover:bg-slate-50' 
+                : 'text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 animate-pulse'
+            }`}
+            title="Configure Gemini API Key"
+          >
+            <Key className="w-5 h-5" />
+          </button>
+          
+          <button 
+            onClick={() => handleOpenModal()}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-md hover:shadow-lg flex items-center space-x-2"
+          >
+            <Plus className="w-5 h-5" />
+            <span className="hidden sm:inline">New List</span>
+          </button>
+        </div>
       </nav>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-10">
-        <header className="mb-10">
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">My Vocabulary</h2>
-          <p className="text-slate-500">Create lists and start listening to improve your memory.</p>
+        {!hasKey && (
+          <div className="mb-8 p-6 bg-amber-50 border border-amber-200 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-start space-x-3 text-amber-800">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div className="flex flex-col">
+                <span className="text-sm font-bold">Gemini API key is missing.</span>
+                <p className="text-sm">High-quality AI voices require a selected API key. The app will fallback to local browser TTS otherwise.</p>
+                {/* Billing documentation link provided in the UI as per instructions */}
+                <a 
+                  href="https://ai.google.dev/gemini-api/docs/billing" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-xs text-amber-600 underline hover:no-underline mt-2 font-bold"
+                >
+                  Learn more about billing and API keys
+                </a>
+              </div>
+            </div>
+            <button 
+              onClick={handleConfigKey} 
+              className="whitespace-nowrap bg-amber-600 text-white px-6 py-2.5 rounded-xl text-sm font-black shadow-md hover:bg-amber-700 transition-all"
+            >
+              Select API Key
+            </button>
+          </div>
+        )}
+
+        <header className="mb-12">
+          <h2 className="text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Your Library</h2>
+          <p className="text-slate-500 font-medium">Build your custom word lists and practice listening with AI voices.</p>
         </header>
 
         {lists.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-            <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
-              <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+          <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border-2 border-dashed border-slate-200 shadow-sm">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+              <Plus className="w-10 h-10 text-slate-300" />
             </div>
-            <h3 className="text-xl font-bold text-slate-700 mb-2">No word lists yet</h3>
-            <p className="text-slate-500 mb-8">Tap the button above to create your first collection.</p>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">Start your journey</h3>
+            <p className="text-slate-500 mb-8 max-w-xs text-center">Add words you want to memorize, then start the audio playback session.</p>
             <button 
               onClick={() => handleOpenModal()}
-              className="text-indigo-600 font-semibold hover:underline"
+              className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl"
             >
-              Get started now
+              Create First List
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {lists.map(list => (
               <WordListCard 
                 key={list.id} 
@@ -143,54 +206,51 @@ const App: React.FC = () => {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in slide-in-from-bottom-8 duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-slate-800">{editingList ? 'Edit List' : 'New Word List'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+              <h2 className="text-2xl font-extrabold text-slate-900">{editingList ? 'Edit List' : 'Create New List'}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <Plus className="w-6 h-6 rotate-45" />
               </button>
             </div>
             <form onSubmit={handleSaveList} className="p-8">
               <div className="mb-6">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">List Name</label>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Collection Name</label>
                 <input 
                   type="text" 
                   autoFocus
                   required
                   value={listName}
                   onChange={(e) => setListName(e.target.value)}
-                  placeholder="e.g., TOEFL Essentials"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                  placeholder="e.g., GRE High Frequency"
+                  className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-medium"
                 />
               </div>
               <div className="mb-8">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Words</label>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Word Items</label>
                 <textarea 
                   required
                   value={wordsInput}
                   onChange={(e) => setWordsInput(e.target.value)}
-                  rows={8}
-                  placeholder="Enter words separated by new lines or commas..."
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all resize-none font-mono"
+                  rows={6}
+                  placeholder="apple, banana, cherry (or one per line)..."
+                  className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all resize-none font-mono"
                 />
-                <p className="mt-2 text-xs text-slate-400">Pro tip: Paste a long list directly. We'll handle the formatting.</p>
               </div>
-              <div className="flex space-x-4">
+              <div className="flex gap-4">
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-3 text-slate-600 font-semibold hover:bg-slate-50 rounded-xl transition-colors"
+                  className="flex-1 py-4 text-slate-600 font-bold hover:bg-slate-50 rounded-2xl transition-all border border-slate-200"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition-all"
+                  className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 transition-all"
                 >
-                  Save List
+                  Save Collection
                 </button>
               </div>
             </form>
@@ -198,7 +258,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Study Session */}
       {currentStudyList && (
         <StudySession 
           list={currentStudyList} 

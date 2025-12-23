@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { WordList } from '../types';
+import { Edit2, Trash2, PlayCircle } from 'lucide-react';
 
 interface WordListCardProps {
   list: WordList;
@@ -11,52 +12,48 @@ interface WordListCardProps {
 
 const WordListCard: React.FC<WordListCardProps> = ({ list, onEdit, onDelete, onSelect }) => {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow group">
-      <div className="flex justify-between items-start mb-4">
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 hover:shadow-xl hover:-translate-y-1 transition-all group duration-300">
+      <div className="flex justify-between items-start mb-6">
         <div>
-          <h3 className="text-lg font-bold text-slate-800">{list.name}</h3>
-          <p className="text-sm text-slate-500">{list.words.length} Words</p>
+          <h3 className="text-xl font-extrabold text-slate-900 leading-tight">{list.name}</h3>
+          <p className="text-sm font-bold text-slate-400 mt-1">{list.words.length} Vocabulary Items</p>
         </div>
-        <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <button 
             onClick={() => onEdit(list)}
-            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+            title="Edit"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
+            <Edit2 className="w-4 h-4" />
           </button>
           <button 
             onClick={() => onDelete(list.id)}
-            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+            title="Delete"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
       
-      <div className="flex flex-wrap gap-1 mb-6 h-12 overflow-hidden relative">
-        {list.words.slice(0, 5).map((word, idx) => (
-          <span key={idx} className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">
+      <div className="flex flex-wrap gap-2 mb-8 h-10 overflow-hidden relative pointer-events-none">
+        {list.words.slice(0, 4).map((word, idx) => (
+          <span key={idx} className="px-3 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-bold border border-slate-100">
             {word}
           </span>
         ))}
-        {list.words.length > 5 && (
-          <span className="px-2 py-1 bg-slate-100 text-slate-400 rounded text-xs">+{list.words.length - 5}</span>
+        {list.words.length > 4 && (
+          <span className="px-3 py-1 bg-indigo-50 text-indigo-500 rounded-lg text-xs font-bold border border-indigo-100">
+            +{list.words.length - 4}
+          </span>
         )}
-        <div className="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-white to-transparent" />
       </div>
 
       <button 
         onClick={() => onSelect(list.id)}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+        className="w-full bg-slate-900 hover:bg-indigo-600 text-white font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-slate-100 hover:shadow-indigo-100"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+        <PlayCircle className="w-5 h-5" />
         <span>Start Broadcast</span>
       </button>
     </div>
