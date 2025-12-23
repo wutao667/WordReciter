@@ -1,20 +1,61 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# LingoEcho - 极简语音背单词助手
 
-# Run and deploy your AI Studio app
+LingoEcho 是一款专为高效记忆单词设计的极简 Web 应用。它结合了浏览器原生的语音合成 (TTS) 与语音识别技术，提供清新的交互体验，帮助用户通过听觉与视觉的双重反馈来加固单词记忆。
 
-This contains everything you need to run your app locally.
+## ✨ 功能特性
 
-View your app in AI Studio: https://ai.studio/apps/drive/1KNYhOxNmQgQeGE4S9VgBIob30RKB_0i3
+- **🌿 清新设计**：基于深绿与薄荷色调的 UI，营造安静专注的学习氛围。
+- **🎙️ 语音录入**：支持通过浏览器原生语音识别功能快速录入单词，无需繁琐输入。
+- **🔊 智能播报**：使用 Web Speech API 实现循环朗读，支持中英文自动识别。
+- **🧠 记忆模式**：
+  - 单词随机打乱顺序。
+  - 默认隐藏单词显示，通过点击切换可见性，增强主动回忆效果。
+  - 固定布局设计，防止显示/隐藏单词时页面跳动。
+- **💾 本地存储**：数据存储于浏览器本地（LocalStorage），隐私安全，即开即用。
 
-## Run Locally
+## 🚀 Vercel 部署步骤
 
-**Prerequisites:**  Node.js
+您可以轻松地将 LingoEcho 部署到 Vercel：
 
+1. **准备代码**：确保您的代码已推送至 GitHub 仓库。
+2. **登录 Vercel**：访问 [Vercel 官网](https://vercel.com/) 并使用 GitHub 账号登录。
+3. **导入项目**：
+   - 点击 **"Add New"** -> **"Project"**。
+   - 在 Git 仓库列表中找到并点击 **"Import"** 对应的仓库。
+4. **配置参数**：
+   - Vercel 会自动检测到 Vite 项目。
+   - **Framework Preset** 选择 `Vite`。
+   - **Build Command** 默认为 `npm run build`。
+   - **Output Directory** 默认为 `dist`。
+5. **部署**：点击 **"Deploy"**。
+6. **完成**：等待约 1 分钟，您的应用即可通过 Vercel 分配的域名在线访问。
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 📖 使用方法
+
+### 1. 创建单词列表
+- 点击右上角的 **“新建词单”** 按钮。
+- 输入词单名称（如：雅思核心词）。
+- 在单词列表框中，您可以手动输入单词（支持空格、逗号、换行分隔）。
+- **语音录入**：点击文本框上方的“语音录入”按钮，对着麦克风说话，单词会自动转为文字输入。
+
+### 2. 开始学习
+- 在主页点击词单卡片上的 **“开始播报”**。
+- 进入学习模式后，应用会自动开始循环朗读当前单词（默认循环 3 次）。
+- **隐藏/显示**：单词默认显示为 `***`，点击 **“点击显示单词”** 按钮查看原文，再次点击隐藏。
+- **进度控制**：使用下方的“上一个”、“下一个”按钮切换单词，或点击中间的“重复”按钮重新触发朗读。
+
+### 3. 管理词单
+- 在首页卡片右上角，点击 **“编辑”** 图标修改内容，点击 **“删除”** 图标移除不再需要的词单。
+
+---
+
+## 🛠️ 技术栈
+
+- **框架**: React 19
+- **样式**: Tailwind CSS
+- **图标**: Lucide React
+- **核心能力**: Web Speech API (SpeechSynthesis & SpeechRecognition)
+- **构建工具**: Vite
+
+---
+*注意：语音录入功能需要浏览器获得麦克风权限，建议在 Chrome、Edge 或 Safari 等现代浏览器中使用以获得最佳兼容性。*
