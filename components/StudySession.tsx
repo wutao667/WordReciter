@@ -57,12 +57,12 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   }, [currentIndex, shuffledWords, startSequence]);
 
   const handleNext = () => {
-    setIsWordVisible(false);
+    // 移除 setIsWordVisible(false)，保留当前的显示/隐藏状态
     currentIndex < shuffledWords.length - 1 ? setCurrentIndex(prev => prev + 1) : onFinish();
   };
 
   const handlePrevious = () => {
-    setIsWordVisible(false);
+    // 移除 setIsWordVisible(false)，保留当前的显示/隐藏状态
     if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
   };
 
