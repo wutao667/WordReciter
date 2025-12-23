@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Mic, Activity, Terminal, AlertCircle, CheckCircle, Smartphone } from 'lucide-react';
 
@@ -181,7 +182,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
       <div className="bg-white w-full max-w-4xl h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-red-100 text-red-600 rounded-lg">
               <Activity className="w-5 h-5" />
@@ -199,7 +200,8 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           
           {/* Controls Panel */}
-          <div className="w-full md:w-80 bg-slate-50 border-r border-slate-200 p-6 space-y-8 overflow-y-auto">
+          {/* 移动端: 占据上方 45% 高度, 底部边框。桌面端: 宽度 80, 高度自动, 右侧边框 */}
+          <div className="w-full md:w-80 h-[45%] md:h-auto bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-4 md:p-6 space-y-6 md:space-y-8 overflow-y-auto">
             
             {/* 1. Environment */}
             <section>
@@ -249,7 +251,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
             <section>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">3. 语音识别测试</h3>
               <p className="text-xs text-slate-500 mb-3 leading-relaxed">
-                尝试对着麦克风说 "Hello" 或 "Test"。注意观察右侧日志。
+                尝试对着麦克风说 "Hello" 或 "Test"。注意观察下方日志。
               </p>
               <button 
                 onClick={isListening ? stopRecognition : startRecognition}
@@ -271,7 +273,8 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
           </div>
 
           {/* Logs Panel */}
-          <div className="flex-1 bg-slate-900 p-6 overflow-hidden flex flex-col">
+          {/* 移动端: 占据剩余 55% 高度。桌面端: 自动高度占满剩余宽度 */}
+          <div className="flex-1 h-[55%] md:h-auto bg-slate-900 p-4 md:p-6 overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
               <h3 className="text-slate-400 font-mono text-xs flex items-center gap-2">
                 <Terminal className="w-4 h-4" />
