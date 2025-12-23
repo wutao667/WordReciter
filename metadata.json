@@ -1,0 +1,7 @@
+{
+  "name": "LingoEcho - Word Reciter",
+  "description": "A minimalist word memorization app that uses AI-powered text-to-speech to help you learn vocabulary through audio repetition and random sequencing.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
