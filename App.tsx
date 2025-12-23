@@ -3,11 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle } from 'lucide-react';
+import DebugConsole from './components/DebugConsole';
+import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug } from 'lucide-react';
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDebugOpen, setIsDebugOpen] = useState(false); // 调试状态
   const [editingList, setEditingList] = useState<WordList | null>(null);
   const [currentStudyListId, setCurrentStudyListId] = useState<string | null>(null);
   const [listName, setListName] = useState('');
@@ -36,8 +38,6 @@ const App: React.FC = () => {
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
       
-      // 核心修复：移动端（iOS/Android）对 continuous: true 支持极差，常表现为“听到了但没结果”
-      // 强制在移动端使用非连续模式，配合 onend 的自动重启来模拟连续体验
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       recognition.continuous = !isMobile;
       
@@ -52,25 +52,19 @@ const App: React.FC = () => {
       };
 
       recognition.onend = () => {
-        // 如果有待处理的语言切换，优先处理
         if (pendingLangRef.current) {
           const nextLang = pendingLangRef.current;
-          // 移动端关键：给浏览器一点时间释放麦克风资源后再开启新会话
           setTimeout(() => startListening(nextLang), 100);
           return;
         }
 
-        // 自动重启逻辑
         if (!manualStopRef.current && isListeningRef.current) {
-          // 移动端关键：增加微小延迟，解决 iOS 上立即重启导致的 not-allowed 或无响应问题
           setTimeout(() => {
             if (!manualStopRef.current && isListeningRef.current) {
               try {
                 recognition.start();
               } catch (e) {
                 console.warn('Auto restart failed:', e);
-                // 重启失败也不要立即置为 false，让用户有机会重试或等待下一次尝试（部分浏览器有冷却时间）
-                // 仅当确实无法恢复时才停止 UI，这里选择保守策略，若连续失败会由 onerror 接管
               }
             }
           }, 100); 
@@ -84,8 +78,6 @@ const App: React.FC = () => {
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        
-        // 忽略移动端常见的非致命错误
         if (event.error === 'no-speech' || event.error === 'aborted') {
            return;
         }
@@ -101,7 +93,6 @@ const App: React.FC = () => {
           isListeningRef.current = false;
           setPendingLang(null);
         } else {
-           // 其他错误也停止
            setIsListening(false);
            isListeningRef.current = false;
            setPendingLang(null);
@@ -132,8 +123,6 @@ const App: React.FC = () => {
 
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         
-        // 只有当有内容时才启动静默检测
-        // 延长到 1500ms，避免在移动端（continuous=false）模式下过于频繁地打断
         if (currentInterim.trim() || finalBatch.trim()) {
           silenceTimerRef.current = setTimeout(() => {
             if (isListeningRef.current && !manualStopRef.current && !pendingLangRef.current) {
@@ -281,13 +270,23 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
-          <button 
-            onClick={() => handleOpenModal()}
-            className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-200 flex items-center gap-2 text-sm"
-          >
-            <Plus className="w-4 h-4 stroke-[3px]" />
-            <span>新建词单</span>
-          </button>
+          <div className="flex gap-3">
+             {/* 调试按钮 */}
+            <button 
+              onClick={() => setIsDebugOpen(true)}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-500 p-3 rounded-2xl transition-all shadow-sm flex items-center justify-center"
+              title="语音调试工具"
+            >
+              <Bug className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={() => handleOpenModal()}
+              className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-200 flex items-center gap-2 text-sm"
+            >
+              <Plus className="w-4 h-4 stroke-[3px]" />
+              <span>新建词单</span>
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -324,6 +323,9 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* 调试控制台弹窗 */}
+      {isDebugOpen && <DebugConsole onClose={() => setIsDebugOpen(false)} />}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/20 backdrop-blur-md">
