@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Mic, Activity, Terminal, AlertCircle, CheckCircle, Smartphone } from 'lucide-react';
+import { X, Mic, Activity, Terminal, AlertCircle, CheckCircle, Smartphone, Trash2, Copy, Check } from 'lucide-react';
 
 interface DebugConsoleProps {
   onClose: () => void;
@@ -11,14 +10,15 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   const [micLevel, setMicLevel] = useState(0);
   const [isListening, setIsListening] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<any>({});
+  const [copied, setCopied] = useState(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
+  const forceEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 1. 初始化环境信息
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -27,24 +27,18 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
       userAgent: navigator.userAgent,
       hasSpeechAPI: !!SpeechRecognition,
       isMobile: isMobile,
-      protocol: window.location.protocol, // http vs https
+      protocol: window.location.protocol,
       platform: navigator.platform
     });
 
     addLog('info', '调试控制台已启动');
     if (!SpeechRecognition) addLog('error', '当前浏览器不支持 SpeechRecognition API');
-    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-      addLog('warn', '语音识别通常需要 HTTPS 环境');
-    }
   }, []);
 
-  // 清理
   useEffect(() => {
     return () => {
       stopMicTest();
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
+      hardAbortRecognition();
     };
   }, []);
 
@@ -56,20 +50,50 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     setLogs(prev => [{ time, type, msg }, ...prev]);
   };
 
-  // 2. 硬件麦克风测试 (AudioContext)
+  const handleCopyLogs = async () => {
+    if (logs.length === 0) return;
+    const text = logs
+      .map(log => `[${log.time}] ${log.type.toUpperCase()}: ${log.msg}`)
+      .reverse() // 按时间顺序排列
+      .join('\n');
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy logs', err);
+      alert('复制失败，请手动截屏');
+    }
+  };
+
+  const stopMicTest = () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (sourceRef.current) {
+        sourceRef.current.mediaStream.getTracks().forEach(track => {
+          track.stop();
+          addLog('info', `已停止麦克风轨道: ${track.label}`);
+        });
+        sourceRef.current.disconnect();
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+    audioContextRef.current = null;
+    analyserRef.current = null;
+    sourceRef.current = null;
+    setMicLevel(0);
+    addLog('info', '硬件测试资源已完全释放');
+  };
+
   const startMicTest = async () => {
     try {
-      if (recognitionRef.current) {
-        stopRecognition();
-        addLog('warn', '检测到识别服务正在运行，已自动停止以释放麦克风');
-      }
+      hardAbortRecognition();
+      if (audioContextRef.current) stopMicTest();
 
-      if (audioContextRef.current) await stopMicTest();
-
-      addLog('info', '正在请求麦克风权限 (getUserMedia)...');
+      addLog('info', '请求麦克风权限...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      addLog('success', '麦克风权限已获取，开始分析音频流');
-
+      
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioContext();
       const analyser = ctx.createAnalyser();
@@ -82,123 +106,97 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
       analyserRef.current = analyser;
       sourceRef.current = source;
 
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const updateLevel = () => {
         if (!analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
-        
         let sum = 0;
-        for(let i = 0; i < bufferLength; i++) {
-          sum += dataArray[i];
-        }
-        const average = sum / bufferLength;
-        setMicLevel(Math.min(100, average * 2.5)); 
+        for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        setMicLevel(Math.min(100, (sum / dataArray.length) * 2.5)); 
         rafRef.current = requestAnimationFrame(updateLevel);
       };
-
       updateLevel();
-
+      addLog('success', '硬件监听正常运行中');
     } catch (err: any) {
-      console.error(err);
-      addLog('error', `麦克风访问失败: ${err.name} - ${err.message}`);
+      addLog('error', `硬件测试失败: ${err.message}`);
     }
   };
 
-  const stopMicTest = async () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    if (sourceRef.current) {
-        sourceRef.current.mediaStream.getTracks().forEach(track => track.stop());
-        sourceRef.current.disconnect();
+  const hardAbortRecognition = () => {
+    if (recognitionRef.current) {
+      try {
+        addLog('warn', '尝试强制中断 (Abort) 识别服务...');
+        recognitionRef.current.abort(); // 使用 abort 而不是 stop
+      } catch(e) {}
+      recognitionRef.current = null;
     }
-    if (audioContextRef.current) {
-      await audioContextRef.current.close();
-    }
-    audioContextRef.current = null;
-    analyserRef.current = null;
-    sourceRef.current = null;
-    setMicLevel(0);
-    addLog('info', '硬件测试已停止，麦克风资源已释放');
+    setIsListening(false);
+    if (forceEndTimerRef.current) clearTimeout(forceEndTimerRef.current);
   };
 
-  // 3. 语音识别测试 API
   const startRecognition = async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
-    // 关键修复：如果 AudioContext 正在运行，必须先彻底关闭它，否则移动端麦克风会被锁死
     if (audioContextRef.current || micLevel > 0) {
-      addLog('warn', '硬件测试正在占用麦克风，正在强制释放...');
-      await stopMicTest();
-      // 给操作系统一点点时间来切换资源
-      await new Promise(resolve => setTimeout(resolve, 300));
+      addLog('warn', '正在释放硬件测试占用的麦克风...');
+      stopMicTest();
+      await new Promise(resolve => setTimeout(resolve, 800));
     }
 
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch(e) {}
-    }
+    hardAbortRecognition();
 
     const recognition = new SpeechRecognition();
     const isMobile = deviceInfo.isMobile;
     
-    // 基础配置
     recognition.lang = 'en-US';
-    recognition.continuous = !isMobile; 
-    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.interimResults = true; 
     recognition.maxAlternatives = 1;
 
-    addLog('info', `初始化识别: Mobile=${isMobile}, Continuous=${recognition.continuous}, Lang=${recognition.lang}`);
+    addLog('info', `启动识别参数: Lang=${recognition.lang}, Continuous=false`);
 
     recognition.onstart = () => {
       setIsListening(true);
-      addLog('event', 'onstart: 识别服务已启动');
+      addLog('event', 'ONSTART: 服务已挂载');
+      forceEndTimerRef.current = setTimeout(() => {
+        addLog('error', '超时警告: 已启动但未检测到音频输入，可能是底层服务卡死');
+      }, 5000);
     };
 
-    recognition.onaudiostart = () => addLog('event', 'onaudiostart: 开始捕获音频 (重要节点)');
-    recognition.onsoundstart = () => addLog('event', 'onsoundstart: 检测到任何声音 (重要节点)');
-    recognition.onspeechstart = () => addLog('event', 'onspeechstart: 检测到语音特征 (重要节点)');
+    recognition.onaudiostart = () => {
+      addLog('event', 'ONAUDIOSTART: 硬件音频流已接通');
+      if (forceEndTimerRef.current) clearTimeout(forceEndTimerRef.current);
+    };
+    
+    recognition.onsoundstart = () => addLog('event', 'ONSOUNDSTART: 检测到声波');
+    recognition.onspeechstart = () => addLog('event', 'ONSPEECHSTART: 匹配到语音特征');
 
     recognition.onresult = (event: any) => {
       const result = event.results[event.resultIndex];
-      const text = result[0].transcript;
-      const isFinal = result.isFinal;
-      addLog('success', `onresult [${isFinal ? 'Final' : 'Interim'}]: "${text}"`);
+      addLog('success', `RESULT: "${result[0].transcript}" (${result.isFinal ? '最终' : '中间'})`);
     };
 
-    recognition.onnomatch = () => addLog('warn', 'onnomatch: 无法匹配任何词汇');
-    
     recognition.onerror = (event: any) => {
-      addLog('error', `onerror: ${event.error} ${event.message || ''}`);
+      addLog('error', `ONERROR: ${event.error}`);
+      if (event.error === 'network') addLog('warn', '提示: 移动端语音识别通常需要稳定的网络连接');
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      addLog('event', 'onend: 识别服务已断开');
+      addLog('event', 'ONEND: 服务已关闭');
+      if (forceEndTimerRef.current) clearTimeout(forceEndTimerRef.current);
     };
-
-    // 监听结束事件用于排查
-    recognition.onaudioend = () => addLog('info', 'onaudioend: 音频捕获停止');
-    recognition.onsoundend = () => addLog('info', 'onsoundend: 声音消失');
-    recognition.onspeechend = () => addLog('info', 'onspeechend: 语音片段结束');
 
     try {
       recognition.start();
-      addLog('info', 'recognition.start() 指令已发出');
+      addLog('info', 'EXEC: recognition.start() 已执行');
     } catch (e: any) {
-      addLog('error', `调用 start() 失败: ${e.message}`);
+      addLog('error', `EXEC FAILED: ${e.message}`);
+      setIsListening(false);
     }
 
     recognitionRef.current = recognition;
-  };
-
-  const stopRecognition = () => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-        addLog('info', '已发出停止指令');
-      } catch(e) {}
-    }
   };
 
   return (
@@ -213,7 +211,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
             </div>
             <div>
               <h2 className="font-black text-slate-800 text-lg">语音诊断实验室</h2>
-              <p className="text-xs text-slate-500 font-mono">Debug Console v1.0.1 (Mic-Lock Fix)</p>
+              <p className="text-xs text-slate-500 font-mono">Debug Console v1.0.3 (Logger Pro)</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
@@ -224,100 +222,84 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           
           {/* Controls Panel */}
-          <div className="w-full md:w-80 h-[45%] md:h-auto bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-4 md:p-6 space-y-6 md:space-y-8 overflow-y-auto">
+          <div className="w-full md:w-80 h-[45%] md:h-auto bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-4 md:p-6 space-y-6 overflow-y-auto">
             
-            <section>
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">1. 环境检测</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between p-2 bg-white rounded border border-slate-200">
-                  <span className="text-slate-500">API 支持</span>
-                  {deviceInfo.hasSpeechAPI ? <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle className="w-3 h-3"/> YES</span> : <span className="text-red-500 font-bold">NO</span>}
-                </div>
-                <div className="flex justify-between p-2 bg-white rounded border border-slate-200">
-                  <span className="text-slate-500">HTTPS</span>
-                  {deviceInfo.protocol === 'https:' || window.location.hostname === 'localhost' ? <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle className="w-3 h-3"/> YES</span> : <span className="text-red-500 font-bold">NO</span>}
-                </div>
-                <div className="flex justify-between p-2 bg-white rounded border border-slate-200">
-                  <span className="text-slate-500">设备类型</span>
-                  {deviceInfo.isMobile ? <span className="text-indigo-600 font-bold flex items-center gap-1"><Smartphone className="w-3 h-3"/> Mobile</span> : <span className="text-slate-600 font-bold">Desktop</span>}
-                </div>
+            <section className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">环境快照</h3>
+              <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+                <div className="bg-slate-50 p-2 rounded">HTTPS: {deviceInfo.protocol === 'https:' ? '✅' : '❌'}</div>
+                <div className="bg-slate-50 p-2 rounded">API: {deviceInfo.hasSpeechAPI ? '✅' : '❌'}</div>
+                <div className="bg-slate-50 p-2 rounded col-span-2 truncate">UA: {deviceInfo.userAgent?.split(' ').pop()}</div>
               </div>
             </section>
 
-            <section className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
-              <h3 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <AlertCircle className="w-3 h-3" />
-                移动端调试建议
-              </h3>
-              <p className="text-[10px] text-amber-700 leading-relaxed">
-                在移动端，<b>硬件测试</b>与<b>识别测试</b>不能同时运行。如果你启动识别测试，硬件测试将自动关闭。
-              </p>
-            </section>
-
             <section>
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">2. 硬件/音量测试</h3>
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">步骤 A: 硬件检测</h3>
               <button 
                 onClick={micLevel > 0 ? stopMicTest : startMicTest}
-                className={`w-full py-3 rounded-xl font-bold text-sm transition-all mb-4 ${micLevel > 0 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-400'}`}
+                className={`w-full py-3 rounded-xl font-bold text-sm transition-all mb-3 ${micLevel > 0 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-white border-2 border-slate-200 text-slate-700'}`}
               >
-                {micLevel > 0 ? '停止硬件监听' : '启动麦克风监听'}
+                {micLevel > 0 ? '释放麦克风' : '测试物理音量'}
               </button>
-
-              <div className="h-4 bg-slate-200 rounded-full overflow-hidden relative">
-                <div 
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-75"
-                  style={{ width: `${micLevel}%` }}
-                />
+              <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 transition-all duration-75" style={{ width: `${micLevel}%` }} />
               </div>
             </section>
 
             <section>
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">3. 语音识别测试</h3>
-              <button 
-                onClick={isListening ? stopRecognition : startRecognition}
-                className={`w-full py-4 rounded-xl font-black text-sm shadow-lg transition-all flex items-center justify-center gap-2 ${isListening ? 'bg-red-500 text-white shadow-red-200 animate-pulse' : 'bg-indigo-600 text-white shadow-indigo-200 hover:scale-[1.02]'}`}
-              >
-                {isListening ? (
-                  <>
-                    <Activity className="w-4 h-4 animate-spin" />
-                    <span>停止识别</span>
-                  </>
-                ) : (
-                  <>
-                    <Mic className="w-4 h-4" />
-                    <span>启动 API 测试</span>
-                  </>
-                )}
-              </button>
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">步骤 B: 识别测试</h3>
+              <div className="space-y-2">
+                <button 
+                  onClick={isListening ? hardAbortRecognition : startRecognition}
+                  className={`w-full py-4 rounded-xl font-black text-sm shadow-lg transition-all flex items-center justify-center gap-2 ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-indigo-600 text-white'}`}
+                >
+                  {isListening ? <><X className="w-4 h-4"/> 强制停止 (Abort)</> : <><Mic className="w-4 h-4"/> 启动识别 (Start)</>}
+                </button>
+                <p className="text-[10px] text-slate-400 text-center leading-tight">注意：在移动端，开启识别会自动关闭硬件测试音量条</p>
+              </div>
             </section>
           </div>
 
           {/* Logs Panel */}
-          <div className="flex-1 h-[55%] md:h-auto bg-slate-900 p-4 md:p-6 overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
-              <h3 className="text-slate-400 font-mono text-xs flex items-center gap-2">
-                <Terminal className="w-4 h-4" />
-                SYSTEM LOGS
-              </h3>
-              <button onClick={() => setLogs([])} className="text-[10px] text-slate-500 hover:text-white uppercase">Clear</button>
+          <div className="flex-1 h-[55%] md:h-auto bg-slate-900 p-4 flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-slate-500 font-mono text-[10px] uppercase tracking-wider">Console Output</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={handleCopyLogs}
+                  disabled={logs.length === 0}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition-all ${copied ? 'bg-emerald-500/20 text-emerald-400' : 'hover:bg-slate-800 text-slate-400 disabled:opacity-30'}`}
+                >
+                  {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                  <span>{copied ? '已复制' : '复制日志'}</span>
+                </button>
+                <button 
+                  onClick={() => setLogs([])} 
+                  disabled={logs.length === 0}
+                  className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-colors disabled:opacity-30"
+                  title="清除日志"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto font-mono text-xs space-y-1.5 pr-2">
+            <div className="flex-1 overflow-y-auto font-mono text-[10px] space-y-1 pr-2 mt-1">
               {logs.length === 0 && (
-                <div className="text-slate-600 italic text-center mt-20">等待操作日志...</div>
+                <div className="text-slate-700 italic text-center mt-12">No logs recorded yet...</div>
               )}
               {logs.map((log, idx) => (
-                <div key={idx} className="flex gap-3 animate-in slide-in-from-left-2 duration-200">
+                <div key={idx} className="flex gap-2 leading-relaxed">
                   <span className="text-slate-600 shrink-0 select-none">[{log.time}]</span>
                   <span className={`break-all ${
                     log.type === 'error' ? 'text-red-400 font-bold' :
                     log.type === 'success' ? 'text-emerald-400 font-bold' :
                     log.type === 'warn' ? 'text-amber-400' :
-                    log.type === 'event' ? 'text-indigo-300' :
-                    'text-slate-300'
+                    log.type === 'event' ? 'text-indigo-400' : 'text-slate-400'
                   }`}>
-                    {log.type === 'event' && '⚡ '}
-                    {log.type === 'error' && '❌ '}
                     {log.msg}
                   </span>
                 </div>
