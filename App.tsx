@@ -16,12 +16,18 @@ const App: React.FC = () => {
   const [listeningLang, setListeningLang] = useState<'en-US' | 'zh-CN'>('en-US');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [interimText, setInterimText] = useState('');
+  const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); // 改为 State 以支持 UI 同步
   
   const recognitionRef = useRef<any>(null);
   const manualStopRef = useRef(false);
   const isListeningRef = useRef(false); 
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); 
-  const pendingLangRef = useRef<'en-US' | 'zh-CN' | null>(null); // 用于处理切换语言的等待状态
+  // 使用 Ref 同步最新值给回调函数，避免闭包问题
+  const pendingLangRef = useRef<'en-US' | 'zh-CN' | null>(null);
+
+  useEffect(() => {
+    pendingLangRef.current = pendingLang;
+  }, [pendingLang]);
 
   useEffect(() => {
     const saved = localStorage.getItem('lingo-echo-lists');
@@ -36,6 +42,7 @@ const App: React.FC = () => {
       recognition.onstart = () => {
         setIsListening(true);
         isListeningRef.current = true;
+        setPendingLang(null); // 启动成功，清除等待状态
         setErrorMsg(null);
       };
 
@@ -43,7 +50,7 @@ const App: React.FC = () => {
         // 核心逻辑：如果存在待处理的切换请求
         if (pendingLangRef.current) {
           const nextLang = pendingLangRef.current;
-          pendingLangRef.current = null;
+          // 注意：不要在这里直接 setPendingLang(null)，在 startListening 的 onstart 里处理
           startListening(nextLang);
           return;
         }
@@ -60,6 +67,7 @@ const App: React.FC = () => {
           setIsListening(false);
           isListeningRef.current = false;
           setInterimText('');
+          setPendingLang(null);
         }
       };
 
@@ -67,12 +75,12 @@ const App: React.FC = () => {
         console.error('Speech recognition error:', event.error);
         if (event.error === 'not-allowed') {
           setErrorMsg('请允许麦克风权限以使用语音录入');
-          setIsListening(false);
-          isListeningRef.current = false;
-          pendingLangRef.current = null;
         } else if (event.error === 'network') {
           setErrorMsg('网络异常，请检查网络连接');
         }
+        setIsListening(false);
+        isListeningRef.current = false;
+        setPendingLang(null);
       };
 
       recognition.onresult = (e: any) => {
@@ -115,7 +123,7 @@ const App: React.FC = () => {
 
   const stopListening = () => {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    pendingLangRef.current = null;
+    setPendingLang(null);
     if (recognitionRef.current) {
       manualStopRef.current = true;
       isListeningRef.current = false;
@@ -131,19 +139,31 @@ const App: React.FC = () => {
       return;
     }
 
-    if (isListening) {
-      if (listeningLang === lang) {
-        // 点击同一个按钮 -> 停止
+    // 如果已经在切换中，再次点击按钮：
+    if (pendingLang !== null) {
+      if (pendingLang === lang) {
+        // 点击当前正在尝试切换的语言 -> 取消切换并停止
         stopListening();
       } else {
-        // 点击另一个语言按钮 -> 标记并停止，等待 onend 重启
+        // 点击另一个语言 -> 更新切换目标
+        setPendingLang(lang);
+        setListeningLang(lang);
+      }
+      return;
+    }
+
+    if (isListening) {
+      if (listeningLang === lang) {
+        // 点击当前正在录入的语言 -> 停止
+        stopListening();
+      } else {
+        // 点击另一个语言 -> 启动切换流程
         manualStopRef.current = true;
         isListeningRef.current = false;
-        pendingLangRef.current = lang;
-        recognitionRef.current.stop();
-        // UI 立即反馈切换中
+        setPendingLang(lang);
         setListeningLang(lang);
-        setInterimText('正在切换语言...');
+        recognitionRef.current.stop();
+        setInterimText('正在准备切换...');
       }
       return;
     }
@@ -164,6 +184,7 @@ const App: React.FC = () => {
       console.error('Start failed', e);
       isListeningRef.current = false;
       setIsListening(false);
+      setPendingLang(null);
     }
   };
 
@@ -290,24 +311,22 @@ const App: React.FC = () => {
                   <div className="flex gap-2">
                     <button 
                       type="button" 
-                      disabled={pendingLangRef.current !== null}
                       onClick={() => toggleListening('en-US')} 
-                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 disabled:opacity-50'}`}
+                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'} ${pendingLang === 'en-US' ? 'animate-pulse opacity-70' : ''}`}
                     >
-                      {isListening && listeningLang === 'en-US' && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
-                      <Mic className="w-3 h-3" />
-                      <span>{isListening && listeningLang === 'en-US' ? '停止录入' : 'EN 录入'}</span>
+                      {isListening && listeningLang === 'en-US' && !pendingLang && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
+                      {pendingLang === 'en-US' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mic className="w-3 h-3" />}
+                      <span>{pendingLang === 'en-US' ? '切换中...' : (isListening && listeningLang === 'en-US' ? '停止录入' : 'EN 录入')}</span>
                     </button>
                     
                     <button 
                       type="button" 
-                      disabled={pendingLangRef.current !== null}
                       onClick={() => toggleListening('zh-CN')} 
-                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 disabled:opacity-50'}`}
+                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'} ${pendingLang === 'zh-CN' ? 'animate-pulse opacity-70' : ''}`}
                     >
-                      {isListening && listeningLang === 'zh-CN' && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
-                      <Languages className="w-3 h-3" />
-                      <span>{isListening && listeningLang === 'zh-CN' ? '停止录入' : '中 录入'}</span>
+                      {isListening && listeningLang === 'zh-CN' && !pendingLang && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
+                      {pendingLang === 'zh-CN' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Languages className="w-3 h-3" />}
+                      <span>{pendingLang === 'zh-CN' ? '切换中...' : (isListening && listeningLang === 'zh-CN' ? '停止录入' : '中 录入')}</span>
                     </button>
                   </div>
                 </div>
@@ -326,7 +345,7 @@ const App: React.FC = () => {
                     </div>
                   )}
 
-                  {isListening && (
+                  {(isListening || pendingLang) && (
                     <div className={`absolute inset-x-0 -bottom-2 translate-y-full px-4 py-3 bg-white border rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 ${listeningLang === 'en-US' ? 'border-indigo-100' : 'border-emerald-100'}`}>
                       <div className="flex gap-1">
                         <span className={`w-1.5 h-4 rounded-full animate-[bounce_1s_infinite] ${listeningLang === 'en-US' ? 'bg-indigo-400' : 'bg-emerald-400'}`} />
@@ -336,7 +355,7 @@ const App: React.FC = () => {
                       <div className="flex-1 overflow-hidden">
                         <p className="text-sm font-bold text-slate-500 truncate italic">
                           <span className="mr-2 opacity-40 font-black">[{listeningLang === 'en-US' ? 'EN' : '中'}]</span>
-                          {interimText || "请对着麦克风说话..."}
+                          {pendingLang ? "正在重新配置识别引擎..." : (interimText || "请对着麦克风说话...")}
                         </p>
                       </div>
                       <button type="button" onClick={stopListening} className="text-slate-300 hover:text-red-500 transition-colors p-1">
