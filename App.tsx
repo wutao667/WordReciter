@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
@@ -14,13 +14,18 @@ const App: React.FC = () => {
   const [wordsInput, setWordsInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [listeningLang, setListeningLang] = useState<'en-US' | 'zh-CN'>('en-US');
-  const [interimText, setInterimText] = useState(''); // 实时显示的识别内容
+  const [interimText, setInterimText] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  
   const recognitionRef = useRef<any>(null);
+  const manualStopRef = useRef(false);
+  const isListeningRef = useRef(false); // 使用 Ref 同步实际运行状态，避免闭包过时
 
   useEffect(() => {
     const saved = localStorage.getItem('lingo-echo-lists');
     if (saved) try { setLists(JSON.parse(saved)); } catch (e) {}
 
+    // 初始化语音识别对象，仅执行一次
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
@@ -29,19 +34,34 @@ const App: React.FC = () => {
 
       recognition.onstart = () => {
         setIsListening(true);
-        setInterimText('');
+        isListeningRef.current = true;
+        setErrorMsg(null);
       };
 
       recognition.onend = () => {
-        setIsListening(false);
-        setInterimText('');
+        // 如果不是手动停止，且我们希望它还在运行，则尝试重启（移动端适配）
+        if (!manualStopRef.current && isListeningRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {
+            setIsListening(false);
+            isListeningRef.current = false;
+          }
+        } else {
+          setIsListening(false);
+          isListeningRef.current = false;
+          setInterimText('');
+        }
       };
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        if (event.error !== 'no-speech') {
+        if (event.error === 'not-allowed') {
+          setErrorMsg('请允许麦克风权限以使用语音录入');
           setIsListening(false);
-          setInterimText('');
+          isListeningRef.current = false;
+        } else if (event.error === 'network') {
+          setErrorMsg('网络异常，请检查网络连接');
         }
       };
 
@@ -69,30 +89,58 @@ const App: React.FC = () => {
       };
       recognitionRef.current = recognition;
     }
-  }, []);
+  }, []); // 仅挂载时初始化一次
 
   useEffect(() => { localStorage.setItem('lingo-echo-lists', JSON.stringify(lists)); }, [lists]);
 
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      manualStopRef.current = true;
+      isListeningRef.current = false;
+      recognitionRef.current.stop();
+      setIsListening(false);
+      setInterimText('');
+    }
+  };
+
   const toggleListening = (lang: 'en-US' | 'zh-CN') => {
     if (!recognitionRef.current) {
-      alert('您的浏览器暂不支持语音识别功能。');
+      alert('您的浏览器暂不支持语音识别功能。若在 iOS 上，请确保使用 Safari 浏览器并处于 HTTPS 环境。');
       return;
     }
 
     if (isListening) {
-      recognitionRef.current.stop();
-      // 如果点击的是不同的语言，则在停止后重新启动
-      if (listeningLang !== lang) {
+      if (listeningLang === lang) {
+        // 如果语言相同，则直接停止
+        stopListening();
+        return;
+      } else {
+        // 如果切换语言，先完全停止上一个
+        stopListening();
+        // 给浏览器一点点喘息时间再开启新语言识别（移动端手势必须连续）
         setTimeout(() => {
-          recognitionRef.current.lang = lang;
-          setListeningLang(lang);
-          recognitionRef.current.start();
-        }, 300);
+          startListening(lang);
+        }, 100);
+        return;
       }
-    } else {
-      recognitionRef.current.lang = lang;
-      setListeningLang(lang);
+    }
+
+    startListening(lang);
+  };
+
+  const startListening = (lang: 'en-US' | 'zh-CN') => {
+    if (!recognitionRef.current) return;
+    
+    manualStopRef.current = false;
+    isListeningRef.current = true;
+    setListeningLang(lang);
+    recognitionRef.current.lang = lang;
+    try {
       recognitionRef.current.start();
+    } catch (e) {
+      console.error('Start failed', e);
+      isListeningRef.current = false;
+      setIsListening(false);
     }
   };
 
@@ -106,6 +154,7 @@ const App: React.FC = () => {
       setListName('');
       setWordsInput('');
     }
+    setErrorMsg(null);
     setIsModalOpen(true);
   };
 
@@ -127,13 +176,13 @@ const App: React.FC = () => {
       setLists(prev => [{ id: crypto.randomUUID(), name: finalName, words, createdAt: Date.now() }, ...prev]);
     }
     setIsModalOpen(false);
+    stopListening(); // 保存时确保停止录音
   };
 
   const currentStudyList = lists.find(l => l.id === currentStudyListId);
 
   return (
     <div className="min-h-screen pb-20">
-      {/* 顶部导航 */}
       <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-slate-200/50 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -157,7 +206,6 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      {/* 主体内容 */}
       <main className="max-w-7xl mx-auto px-6 mt-16">
         <div className="mb-16">
           <div className="inline-flex items-center px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest mb-4 border border-indigo-100/50">
@@ -192,7 +240,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* 弹窗设计 */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/20 backdrop-blur-md">
           <div className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl w-full max-w-xl border border-white overflow-hidden animate-in zoom-in-95 duration-300">
@@ -201,7 +248,7 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-black">{editingList ? '编辑内容' : '创建新词单'}</h2>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Edit Collection Details</p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-300 hover:text-red-500 p-2 transition-colors">
+              <button onClick={() => { setIsModalOpen(false); stopListening(); }} className="text-slate-300 hover:text-red-500 p-2 transition-colors">
                 <Plus className="w-8 h-8 rotate-45" />
               </button>
             </div>
@@ -218,7 +265,6 @@ const App: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 ml-1">
                   <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">词汇明细 Vocabulary</label>
                   <div className="flex gap-2">
-                    {/* 英文录入按钮 */}
                     <button 
                       type="button" 
                       onClick={() => toggleListening('en-US')} 
@@ -226,10 +272,9 @@ const App: React.FC = () => {
                     >
                       {isListening && listeningLang === 'en-US' && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
                       <Mic className="w-3 h-3" />
-                      <span>{isListening && listeningLang === 'en-US' ? '正在录入英文...' : '录入英文'}</span>
+                      <span>{isListening && listeningLang === 'en-US' ? '停止录入' : 'EN 录入'}</span>
                     </button>
                     
-                    {/* 中文录入按钮 */}
                     <button 
                       type="button" 
                       onClick={() => toggleListening('zh-CN')} 
@@ -237,7 +282,7 @@ const App: React.FC = () => {
                     >
                       {isListening && listeningLang === 'zh-CN' && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
                       <Languages className="w-3 h-3" />
-                      <span>{isListening && listeningLang === 'zh-CN' ? '正在录入中文...' : '录入中文'}</span>
+                      <span>{isListening && listeningLang === 'zh-CN' ? '停止录入' : '中 录入'}</span>
                     </button>
                   </div>
                 </div>
@@ -249,7 +294,13 @@ const App: React.FC = () => {
                     className={`w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 outline-none font-bold text-lg resize-none transition-all shadow-inner ${isListening ? (listeningLang === 'en-US' ? 'border-indigo-200 bg-indigo-50/10' : 'border-emerald-200 bg-emerald-50/10') : 'border-transparent focus:bg-white focus:border-indigo-500'}`}
                   />
                   
-                  {/* 实时反馈浮层 */}
+                  {errorMsg && (
+                    <div className="mt-2 flex items-center gap-2 text-red-500 bg-red-50 px-4 py-2 rounded-xl text-xs font-bold animate-in fade-in slide-in-from-top-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      {errorMsg}
+                    </div>
+                  )}
+
                   {isListening && (
                     <div className={`absolute inset-x-0 -bottom-2 translate-y-full px-4 py-3 bg-white border rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 ${listeningLang === 'en-US' ? 'border-indigo-100' : 'border-emerald-100'}`}>
                       <div className="flex gap-1">
@@ -260,20 +311,20 @@ const App: React.FC = () => {
                       <div className="flex-1 overflow-hidden">
                         <p className="text-sm font-bold text-slate-500 truncate italic">
                           <span className="mr-2 opacity-40 font-black">[{listeningLang === 'en-US' ? 'EN' : '中'}]</span>
-                          {interimText || "正在聆听..."}
+                          {interimText || "请对着麦克风说话..."}
                         </p>
                       </div>
-                      <button type="button" onClick={() => toggleListening(listeningLang)} className="text-slate-300 hover:text-red-500 transition-colors">
-                        <XCircle className="w-5 h-5" />
+                      <button type="button" onClick={stopListening} className="text-slate-300 hover:text-red-500 transition-colors p-1">
+                        <XCircle className="w-6 h-6" />
                       </button>
                     </div>
                   )}
                 </div>
               </div>
               <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-2xl transition-all">取消</button>
+                <button type="button" onClick={() => { setIsModalOpen(false); stopListening(); }} className="flex-1 py-4 font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-2xl transition-all">取消</button>
                 <button type="submit" disabled={isListening} className={`flex-[2] py-4 font-black rounded-2xl shadow-xl transition-all ${isListening ? 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100 hover:scale-[1.02] active:scale-95'}`}>
-                  完成并保存
+                  保存并开始
                 </button>
               </div>
             </form>
