@@ -42,7 +42,9 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   useEffect(() => {
     return () => {
       stopMicTest();
-      stopRecognition();
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
     };
   }, []);
 
@@ -57,6 +59,11 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   // 2. 硬件麦克风测试 (AudioContext)
   const startMicTest = async () => {
     try {
+      if (recognitionRef.current) {
+        stopRecognition();
+        addLog('warn', '检测到识别服务正在运行，已自动停止以释放麦克风');
+      }
+
       if (audioContextRef.current) await stopMicTest();
 
       addLog('info', '正在请求麦克风权限 (getUserMedia)...');
@@ -82,13 +89,11 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
         if (!analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
         
-        // 计算平均音量
         let sum = 0;
         for(let i = 0; i < bufferLength; i++) {
           sum += dataArray[i];
         }
         const average = sum / bufferLength;
-        // 放大一点显示效果
         setMicLevel(Math.min(100, average * 2.5)); 
         rafRef.current = requestAnimationFrame(updateLevel);
       };
@@ -111,60 +116,77 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
       await audioContextRef.current.close();
     }
     audioContextRef.current = null;
+    analyserRef.current = null;
+    sourceRef.current = null;
     setMicLevel(0);
-    addLog('info', '硬件测试已停止');
+    addLog('info', '硬件测试已停止，麦克风资源已释放');
   };
 
   // 3. 语音识别测试 API
-  const startRecognition = () => {
+  const startRecognition = async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
-    if (recognitionRef.current) recognitionRef.current.stop();
+    // 关键修复：如果 AudioContext 正在运行，必须先彻底关闭它，否则移动端麦克风会被锁死
+    if (audioContextRef.current || micLevel > 0) {
+      addLog('warn', '硬件测试正在占用麦克风，正在强制释放...');
+      await stopMicTest();
+      // 给操作系统一点点时间来切换资源
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch(e) {}
+    }
 
     const recognition = new SpeechRecognition();
-    
-    // 强制配置用于测试
     const isMobile = deviceInfo.isMobile;
-    recognition.continuous = !isMobile; // 移动端强制 false
+    
+    // 基础配置
+    recognition.lang = 'en-US';
+    recognition.continuous = !isMobile; 
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.lang = 'en-US';
 
-    addLog('info', `初始化识别: Mobile=${isMobile}, Continuous=${recognition.continuous}, Lang=en-US`);
+    addLog('info', `初始化识别: Mobile=${isMobile}, Continuous=${recognition.continuous}, Lang=${recognition.lang}`);
 
     recognition.onstart = () => {
       setIsListening(true);
       addLog('event', 'onstart: 识别服务已启动');
     };
 
-    recognition.onaudiostart = () => addLog('event', 'onaudiostart: 开始捕获音频');
-    recognition.onsoundstart = () => addLog('event', 'onsoundstart: 检测到声音');
-    recognition.onspeechstart = () => addLog('event', 'onspeechstart: 检测到语音片段');
+    recognition.onaudiostart = () => addLog('event', 'onaudiostart: 开始捕获音频 (重要节点)');
+    recognition.onsoundstart = () => addLog('event', 'onsoundstart: 检测到任何声音 (重要节点)');
+    recognition.onspeechstart = () => addLog('event', 'onspeechstart: 检测到语音特征 (重要节点)');
 
     recognition.onresult = (event: any) => {
       const result = event.results[event.resultIndex];
       const text = result[0].transcript;
       const isFinal = result.isFinal;
-      addLog('success', `onresult [${isFinal ? 'Final' : 'Interim'}]: "${text}" (Confidence: ${result[0].confidence})`);
+      addLog('success', `onresult [${isFinal ? 'Final' : 'Interim'}]: "${text}"`);
     };
 
-    recognition.onnomatch = () => addLog('warn', 'onnomatch: 听到了声音但无法识别');
+    recognition.onnomatch = () => addLog('warn', 'onnomatch: 无法匹配任何词汇');
     
     recognition.onerror = (event: any) => {
-      addLog('error', `onerror: ${event.error} ${event.message ? '- ' + event.message : ''}`);
+      addLog('error', `onerror: ${event.error} ${event.message || ''}`);
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      addLog('event', 'onend: 会话结束');
+      addLog('event', 'onend: 识别服务已断开');
     };
+
+    // 监听结束事件用于排查
+    recognition.onaudioend = () => addLog('info', 'onaudioend: 音频捕获停止');
+    recognition.onsoundend = () => addLog('info', 'onsoundend: 声音消失');
+    recognition.onspeechend = () => addLog('info', 'onspeechend: 语音片段结束');
 
     try {
       recognition.start();
-      addLog('info', 'recognition.start() 调用成功');
+      addLog('info', 'recognition.start() 指令已发出');
     } catch (e: any) {
-      addLog('error', `调用 start() 异常: ${e.message}`);
+      addLog('error', `调用 start() 失败: ${e.message}`);
     }
 
     recognitionRef.current = recognition;
@@ -172,8 +194,10 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
   const stopRecognition = () => {
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      addLog('info', '手动停止识别');
+      try {
+        recognitionRef.current.stop();
+        addLog('info', '已发出停止指令');
+      } catch(e) {}
     }
   };
 
@@ -189,7 +213,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
             </div>
             <div>
               <h2 className="font-black text-slate-800 text-lg">语音诊断实验室</h2>
-              <p className="text-xs text-slate-500 font-mono">Debug Console v1.0</p>
+              <p className="text-xs text-slate-500 font-mono">Debug Console v1.0.1 (Mic-Lock Fix)</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
@@ -200,10 +224,8 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           
           {/* Controls Panel */}
-          {/* 移动端: 占据上方 45% 高度, 底部边框。桌面端: 宽度 80, 高度自动, 右侧边框 */}
           <div className="w-full md:w-80 h-[45%] md:h-auto bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-4 md:p-6 space-y-6 md:space-y-8 overflow-y-auto">
             
-            {/* 1. Environment */}
             <section>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">1. 环境检测</h3>
               <div className="space-y-2 text-sm">
@@ -222,11 +244,18 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
               </div>
             </section>
 
-            {/* 2. Hardware */}
+            <section className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+              <h3 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <AlertCircle className="w-3 h-3" />
+                移动端调试建议
+              </h3>
+              <p className="text-[10px] text-amber-700 leading-relaxed">
+                在移动端，<b>硬件测试</b>与<b>识别测试</b>不能同时运行。如果你启动识别测试，硬件测试将自动关闭。
+              </p>
+            </section>
+
             <section>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">2. 硬件/音量测试</h3>
-              <p className="text-xs text-slate-500 mb-3 leading-relaxed">如果不点击此处，麦克风将无法被页面激活。请先测试能否看到绿色波形跳动。</p>
-              
               <button 
                 onClick={micLevel > 0 ? stopMicTest : startMicTest}
                 className={`w-full py-3 rounded-xl font-bold text-sm transition-all mb-4 ${micLevel > 0 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-400'}`}
@@ -240,19 +269,10 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                   style={{ width: `${micLevel}%` }}
                 />
               </div>
-              <div className="flex justify-between mt-1 text-[10px] text-slate-400 font-mono">
-                <span>0%</span>
-                <span>INPUT LEVEL</span>
-                <span>100%</span>
-              </div>
             </section>
 
-            {/* 3. Recognition */}
             <section>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">3. 语音识别测试</h3>
-              <p className="text-xs text-slate-500 mb-3 leading-relaxed">
-                尝试对着麦克风说 "Hello" 或 "Test"。注意观察下方日志。
-              </p>
               <button 
                 onClick={isListening ? stopRecognition : startRecognition}
                 className={`w-full py-4 rounded-xl font-black text-sm shadow-lg transition-all flex items-center justify-center gap-2 ${isListening ? 'bg-red-500 text-white shadow-red-200 animate-pulse' : 'bg-indigo-600 text-white shadow-indigo-200 hover:scale-[1.02]'}`}
@@ -273,7 +293,6 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
           </div>
 
           {/* Logs Panel */}
-          {/* 移动端: 占据剩余 55% 高度。桌面端: 自动高度占满剩余宽度 */}
           <div className="flex-1 h-[55%] md:h-auto bg-slate-900 p-4 md:p-6 overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
               <h3 className="text-slate-400 font-mono text-xs flex items-center gap-2">
