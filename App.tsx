@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import { Plus, Mic, Library, Sparkles, MicOff, Loader2 } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
@@ -34,7 +34,7 @@ const App: React.FC = () => {
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
-      recognition.lang = 'en-US'; // Default to English for word learning
+      recognition.lang = 'en-US';
 
       recognition.onstart = () => setIsListening(true);
       recognition.onend = () => setIsListening(false);
@@ -42,7 +42,6 @@ const App: React.FC = () => {
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
         if (transcript) {
-          // Append new words, separated by new lines
           setWordsInput(prev => {
             const separator = prev.trim() === '' ? '' : '\n';
             return prev + separator + transcript;
@@ -62,7 +61,6 @@ const App: React.FC = () => {
       alert('您的浏览器不支持语音识别功能。');
       return;
     }
-
     if (isListening) {
       recognitionRef.current.stop();
     } else {
@@ -89,7 +87,6 @@ const App: React.FC = () => {
 
   const handleSaveList = (e: React.FormEvent) => {
     e.preventDefault();
-    // Split by common delimiters: newline, comma, semicolon, or multiple spaces
     const words = wordsInput
       .split(/[\n,;\s]+/)
       .map(w => w.trim())
@@ -124,23 +121,25 @@ const App: React.FC = () => {
   const currentStudyList = lists.find(l => l.id === currentStudyListId);
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-green-50">
+    <div className="min-h-screen relative overflow-hidden bg-[#f4faf7]">
+      {/* 背景光晕装饰 - 增强了颜色可见度 */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10">
-        <div className="absolute top-[-5%] left-[-10%] w-[50%] h-[50%] bg-emerald-200/40 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-teal-200/40 rounded-full blur-[100px]" />
-        <div className="absolute top-[30%] right-[10%] w-[20%] h-[20%] bg-green-200/30 rounded-full blur-[80px]" />
+        <div className="absolute top-[-10%] left-[-15%] w-[60%] h-[60%] bg-emerald-300/30 rounded-full blur-[100px] animate-pulse" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-teal-300/30 rounded-full blur-[100px]" />
+        <div className="absolute top-[20%] right-[5%] w-[30%] h-[30%] bg-green-300/20 rounded-full blur-[80px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[100%] bg-gradient-to-b from-transparent via-emerald-50/50 to-transparent" />
       </div>
 
-      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-green-100 px-6 py-4 flex items-center justify-between">
+      <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-emerald-100/50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200 flex-shrink-0">
+          <div className="w-10 h-10 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200/60 flex-shrink-0">
             <Mic className="w-5 h-5 text-white" />
           </div>
           <div className="flex flex-col">
             <h1 className="text-xl font-black tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-emerald-900 to-teal-800">
               LingoEcho
             </h1>
-            <div className="flex items-center text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1 opacity-80">
+            <div className="flex items-center text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1">
               <Sparkles className="w-2.5 h-2.5 mr-1" />
               语音录入听写
             </div>
@@ -163,9 +162,9 @@ const App: React.FC = () => {
         </header>
 
         {lists.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 bg-white/80 backdrop-blur-md rounded-[2.5rem] border border-green-100 shadow-xl shadow-emerald-100/50">
-            <div className="w-24 h-24 bg-gradient-to-b from-green-50 to-emerald-100 rounded-3xl flex items-center justify-center mb-8 ring-1 ring-emerald-200/50">
-              <Library className="w-10 h-10 text-emerald-300" />
+          <div className="flex flex-col items-center justify-center py-24 bg-white/60 backdrop-blur-md rounded-[3rem] border border-white/50 shadow-2xl shadow-emerald-100/30">
+            <div className="w-24 h-24 bg-gradient-to-b from-emerald-50 to-teal-100 rounded-3xl flex items-center justify-center mb-8 ring-1 ring-emerald-200/50">
+              <Library className="w-10 h-10 text-emerald-400" />
             </div>
             <h3 className="text-2xl font-bold text-slate-800 mb-2">库中还没有单词</h3>
             <p className="text-slate-500 mb-10 max-w-xs text-center font-medium">点击上方按钮，开始创建你的第一个绿色学习词单。</p>
@@ -194,11 +193,11 @@ const App: React.FC = () => {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-emerald-900/20 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden relative animate-in zoom-in-95 duration-300 border border-green-100">
-            <div className="px-10 py-8 border-b border-green-50 flex justify-between items-center">
+          <div className="absolute inset-0 bg-emerald-950/20 backdrop-blur-lg" onClick={() => setIsModalOpen(false)} />
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden relative animate-in zoom-in-95 duration-300 border border-emerald-50">
+            <div className="px-10 py-8 border-b border-emerald-50 flex justify-between items-center bg-emerald-50/30">
               <h2 className="text-2xl font-black text-slate-900">{editingList ? '编辑词单' : '创建新词单'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-green-50 text-slate-400 transition-colors">
+              <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-100 text-slate-400 transition-colors">
                 <Plus className="w-6 h-6 rotate-45" />
               </button>
             </div>
@@ -212,7 +211,7 @@ const App: React.FC = () => {
                   value={listName}
                   onChange={(e) => setListName(e.target.value)}
                   placeholder="例如：雅思核心词汇"
-                  className="w-full px-6 py-4 rounded-2xl bg-green-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all font-bold text-slate-800"
+                  className="w-full px-6 py-4 rounded-2xl bg-emerald-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all font-bold text-slate-800"
                 />
               </div>
               <div className="mb-10 relative">
@@ -246,20 +245,20 @@ const App: React.FC = () => {
                   onChange={(e) => setWordsInput(e.target.value)}
                   rows={6}
                   placeholder="手动输入或点击语音录入，单词间用空格、逗号或回车分隔..."
-                  className="w-full px-6 py-4 rounded-2xl bg-green-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all resize-none font-medium text-slate-700"
+                  className="w-full px-6 py-4 rounded-2xl bg-emerald-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all resize-none font-medium text-slate-700"
                 />
               </div>
               <div className="flex gap-4">
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-4 text-slate-500 font-bold hover:bg-green-50 rounded-2xl transition-all"
+                  className="flex-1 py-4 text-slate-500 font-bold hover:bg-emerald-50 rounded-2xl transition-all"
                 >
                   取消
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-xl shadow-emerald-100 transition-all"
+                  className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-xl shadow-emerald-200 transition-all"
                 >
                   保存并开始
                 </button>
