@@ -15,20 +15,13 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWordVisible, setIsWordVisible] = useState(false);
   
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const isComponentMounted = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const stopAllAudio = useCallback(() => {
-    if (currentSourceRef.current) {
-      try {
-        currentSourceRef.current.stop();
-      } catch (e) {}
-      currentSourceRef.current = null;
-    }
+    // 使用原生的 cancel 方法停止所有语音
     window.speechSynthesis.cancel();
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -40,38 +33,12 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     isComponentMounted.current = true;
     const words = [...list.words].sort(() => Math.random() - 0.5);
     setShuffledWords(words);
-    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     
     return () => {
       isComponentMounted.current = false;
       stopAllAudio();
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
     };
   }, [list.words, stopAllAudio]);
-
-  const playCurrentWordOnce = useCallback(async () => {
-    if (!shuffledWords[currentIndex] || !audioContextRef.current) return;
-    
-    if (currentSourceRef.current) {
-      try { currentSourceRef.current.stop(); } catch(e) {}
-      currentSourceRef.current = null;
-    }
-    window.speechSynthesis.cancel();
-
-    try {
-      await speakWord(
-        shuffledWords[currentIndex], 
-        audioContextRef.current, 
-        (source) => {
-          currentSourceRef.current = source;
-        }
-      );
-    } catch (error) {
-      console.error("Single play error:", error);
-    }
-  }, [shuffledWords, currentIndex]);
 
   const startSequence = useCallback(async () => {
     if (!shuffledWords[currentIndex]) return;
@@ -82,11 +49,14 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     
     setIsPlaying(true);
     try {
+      // 循环朗读 3 次
       for (let i = 0; i < 3; i++) {
         if (controller.signal.aborted || !isComponentMounted.current) break;
-        await playCurrentWordOnce();
+        
+        await speakWord(shuffledWords[currentIndex]);
+        
         if (i < 2 && !controller.signal.aborted && isComponentMounted.current) {
-          await delay(1000); 
+          await delay(1200); // 朗读间隔
         }
       }
     } catch (e) {
@@ -96,7 +66,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         setIsPlaying(false);
       }
     }
-  }, [shuffledWords, currentIndex, stopAllAudio, playCurrentWordOnce]);
+  }, [shuffledWords, currentIndex, stopAllAudio]);
 
   useEffect(() => {
     if (shuffledWords.length > 0) {
@@ -120,11 +90,8 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     }
   };
 
-  const handleRepeat = async () => {
-    stopAllAudio();
-    setIsPlaying(true);
-    await playCurrentWordOnce();
-    setIsPlaying(false);
+  const handleRepeat = () => {
+    startSequence();
   };
 
   if (shuffledWords.length === 0) return null;
@@ -184,13 +151,13 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
                     ***
                   </div>
                   <div className="mt-4 text-emerald-600/60 text-sm font-bold tracking-widest uppercase">
-                    {isPlaying ? '正在循环朗读...' : '已暂停'}
+                    {isPlaying ? '正在朗读单词...' : '已暂停'}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* 这里的 margin 会相对于固定高度的容器，点击切换显示状态 */}
+            {/* 点击切换显示状态，位置保持稳定 */}
             <button
               onClick={() => setIsWordVisible(!isWordVisible)}
               className={`mt-8 sm:mt-12 px-8 py-4 rounded-2xl flex items-center space-x-3 transition-all duration-300 font-black text-sm uppercase tracking-wider select-none active:scale-95 ${isWordVisible ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
@@ -244,7 +211,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
               />
             </div>
             <div className="flex justify-between mt-3 px-1">
-              <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest opacity-50">进度条</span>
+              <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest opacity-50">学习进度</span>
               <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{Math.round(progress)}%</span>
             </div>
           </div>
