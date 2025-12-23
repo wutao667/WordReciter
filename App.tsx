@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import { Plus, Mic, Library, Sparkles } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, MicOff, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
@@ -12,6 +12,10 @@ const App: React.FC = () => {
   
   const [listName, setListName] = useState('');
   const [wordsInput, setWordsInput] = useState('');
+  
+  // Speech Recognition State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('lingo-echo-lists');
@@ -22,11 +26,52 @@ const App: React.FC = () => {
         console.error("Failed to load saved lists");
       }
     }
+
+    // Initialize Speech Recognition
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US'; // Default to English for word learning
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => setIsListening(false);
+      recognition.onerror = () => setIsListening(false);
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          // Append new words, separated by new lines
+          setWordsInput(prev => {
+            const separator = prev.trim() === '' ? '' : '\n';
+            return prev + separator + transcript;
+          });
+        }
+      };
+      recognitionRef.current = recognition;
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem('lingo-echo-lists', JSON.stringify(lists));
   }, [lists]);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert('您的浏览器不支持语音识别功能。');
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        console.error("Recognition start error", e);
+      }
+    }
+  };
 
   const handleOpenModal = (list: WordList | null = null) => {
     if (list) {
@@ -43,8 +88,9 @@ const App: React.FC = () => {
 
   const handleSaveList = (e: React.FormEvent) => {
     e.preventDefault();
+    // Split by common delimiters: newline, comma, semicolon, or multiple spaces
     const words = wordsInput
-      .split(/[\n,;]/)
+      .split(/[\n,;\s]+/)
       .map(w => w.trim())
       .filter(w => w !== '');
 
@@ -78,7 +124,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-green-50">
-      {/* 增强后的淡绿色装饰性背景 */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10">
         <div className="absolute top-[-5%] left-[-10%] w-[50%] h-[50%] bg-emerald-200/40 rounded-full blur-[120px] animate-pulse" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-teal-200/40 rounded-full blur-[100px]" />
@@ -106,7 +151,7 @@ const App: React.FC = () => {
         <header className="mb-16 text-center sm:text-left">
           <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold mb-4 ring-1 ring-emerald-200">
             <Sparkles className="w-3 h-3 mr-2" />
-            AI 语音随机听写
+            语音录入听写
           </div>
           <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4 tracking-tight">我的学习库</h2>
           <p className="text-slate-500 font-medium text-lg max-w-2xl">构建你的专属词单，在清新的环境下高效记忆。</p>
@@ -142,7 +187,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-emerald-900/20 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
@@ -166,14 +210,37 @@ const App: React.FC = () => {
                   className="w-full px-6 py-4 rounded-2xl bg-green-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all font-bold text-slate-800"
                 />
               </div>
-              <div className="mb-10">
-                <label className="block text-sm font-black text-emerald-800 mb-3 ml-1 uppercase tracking-wider">单词列表</label>
+              <div className="mb-10 relative">
+                <div className="flex justify-between items-center mb-3 ml-1">
+                  <label className="block text-sm font-black text-emerald-800 uppercase tracking-wider">单词列表</label>
+                  <button 
+                    type="button"
+                    onClick={toggleListening}
+                    className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-black transition-all ${
+                      isListening 
+                      ? 'bg-red-500 text-white animate-pulse' 
+                      : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                    }`}
+                  >
+                    {isListening ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>正在聆听...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-3 h-3" />
+                        <span>语音录入</span>
+                      </>
+                    )}
+                  </button>
+                </div>
                 <textarea 
                   required
                   value={wordsInput}
                   onChange={(e) => setWordsInput(e.target.value)}
                   rows={6}
-                  placeholder="支持回车、逗号或空格分隔单词..."
+                  placeholder="手动输入或点击语音录入，单词间用空格、逗号或回车分隔..."
                   className="w-full px-6 py-4 rounded-2xl bg-green-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all resize-none font-medium text-slate-700"
                 />
               </div>
