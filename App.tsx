@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
@@ -13,6 +13,7 @@ const App: React.FC = () => {
   const [listName, setListName] = useState('');
   const [wordsInput, setWordsInput] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState(''); // 实时显示的识别内容
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
@@ -23,32 +24,49 @@ const App: React.FC = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false; // 移动端建议设为 false，单词输入更准确
-      recognition.interimResults = false;
-      recognition.lang = 'en-US'; // 默认为英文，可根据需要调整
+      recognition.continuous = true; // 开启持续识别，用户可以一口气说多个单词
+      recognition.interimResults = true; // 开启临时结果，实现实时显示
+      recognition.lang = 'en-US';
 
       recognition.onstart = () => {
         setIsListening(true);
+        setInterimText('');
       };
 
       recognition.onend = () => {
         setIsListening(false);
+        setInterimText('');
       };
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-        if (event.error === 'not-allowed') {
-          alert('请允许麦克风访问权限以使用语音录入功能');
+        if (event.error !== 'no-speech') { // 忽略无声音报错，避免频繁弹窗
+          setIsListening(false);
+          setInterimText('');
         }
       };
 
       recognition.onresult = (e: any) => {
-        const text = e.results[0][0].transcript;
-        if (text) {
+        let finalBatch = '';
+        let currentInterim = '';
+
+        for (let i = e.resultIndex; i < e.results.length; ++i) {
+          if (e.results[i].isFinal) {
+            finalBatch += e.results[i][0].transcript;
+          } else {
+            currentInterim += e.results[i][0].transcript;
+          }
+        }
+
+        // 更新临时预览
+        setInterimText(currentInterim);
+
+        // 如果有最终确定的文本，追加到输入框
+        if (finalBatch) {
           setWordsInput(prev => {
-            const trimmedText = text.trim();
-            return prev.trim() ? `${prev}\n${trimmedText}` : trimmedText;
+            const trimmed = finalBatch.trim();
+            if (!trimmed) return prev;
+            return prev.trim() ? `${prev}\n${trimmed}` : trimmed;
           });
         }
       };
@@ -65,11 +83,11 @@ const App: React.FC = () => {
     }
 
     if (isListening) {
-      // 关键修复：手动停止并立即重置状态，防止移动端 onend 不触发导致的 UI 卡死
       try {
         recognitionRef.current.stop();
       } catch (e) {}
       setIsListening(false);
+      setInterimText('');
     } else {
       try {
         recognitionRef.current.start();
@@ -96,11 +114,19 @@ const App: React.FC = () => {
   const handleSaveList = (e: React.FormEvent) => {
     e.preventDefault();
     const words = wordsInput.split(/[\n,;\s]+/).map(w => w.trim()).filter(w => w);
-    if (!listName || words.length === 0) return;
+    if (words.length === 0) return;
+
+    let finalName = listName.trim();
+    if (!finalName) {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      finalName = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    }
+
     if (editingList) {
-      setLists(prev => prev.map(l => l.id === editingList.id ? { ...l, name: listName, words } : l));
+      setLists(prev => prev.map(l => l.id === editingList.id ? { ...l, name: finalName, words } : l));
     } else {
-      setLists(prev => [{ id: crypto.randomUUID(), name: listName, words, createdAt: Date.now() }, ...prev]);
+      setLists(prev => [{ id: crypto.randomUUID(), name: finalName, words, createdAt: Date.now() }, ...prev]);
     }
     setIsModalOpen(false);
   };
@@ -119,7 +145,6 @@ const App: React.FC = () => {
             <div className="flex flex-col">
               <span className="text-2xl font-black tracking-tight text-slate-900 leading-none">听写助手</span>
               <div className="flex items-center gap-1.5 mt-1">
-                <Sparkles className="w-3 h-3 text-indigo-500" />
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">智能语音听写系统</span>
               </div>
             </div>
@@ -186,27 +211,52 @@ const App: React.FC = () => {
               <div>
                 <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest block mb-2 ml-1">词单主题 Title</label>
                 <input 
-                  required value={listName} onChange={e => setListName(e.target.value)}
-                  placeholder="例如：核心 3000 词"
+                  value={listName} onChange={e => setListName(e.target.value)}
+                  placeholder="例如：核心 3000 词 (留空将以当前时间命名)"
                   className="w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 border-transparent focus:bg-white focus:border-indigo-500 outline-none font-bold text-lg transition-all"
                 />
               </div>
               <div>
                 <div className="flex justify-between mb-2 ml-1">
                   <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">词汇明细 Vocabulary</label>
-                  <button type="button" onClick={toggleListening} className={`text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${isListening ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-100' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
-                    {isListening ? <><Loader2 className="w-3 h-3 animate-spin" /><span>正在监听...</span></> : <><Mic className="w-3 h-3" /><span>语音录入</span></>}
+                  <button 
+                    type="button" 
+                    onClick={toggleListening} 
+                    className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening ? 'bg-red-500 text-white shadow-lg shadow-red-200 scale-105' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                  >
+                    {isListening && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
+                    {isListening ? <><Loader2 className="w-3 h-3 animate-spin" /><span>停止录入</span></> : <><Mic className="w-3 h-3" /><span>语音连续录入</span></>}
                   </button>
                 </div>
-                <textarea 
-                  required value={wordsInput} onChange={e => setWordsInput(e.target.value)}
-                  rows={5} placeholder="输入单词，支持空格、逗号或回车分隔..."
-                  className="w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 border-transparent focus:bg-white focus:border-indigo-500 outline-none font-bold text-lg resize-none transition-all shadow-inner"
-                />
+                
+                <div className="relative group">
+                  <textarea 
+                    required value={wordsInput} onChange={e => setWordsInput(e.target.value)}
+                    rows={5} placeholder="点击上方“语音连续录入”或手动输入..."
+                    className={`w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 outline-none font-bold text-lg resize-none transition-all shadow-inner ${isListening ? 'border-red-200 bg-red-50/10' : 'border-transparent focus:bg-white focus:border-indigo-500'}`}
+                  />
+                  
+                  {/* 实时反馈浮层 */}
+                  {isListening && (
+                    <div className="absolute inset-x-0 -bottom-2 translate-y-full px-4 py-3 bg-white border border-red-100 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
+                      <div className="flex gap-1">
+                        <span className="w-1 h-3 bg-red-400 rounded-full animate-[bounce_1s_infinite]" />
+                        <span className="w-1 h-3 bg-red-400 rounded-full animate-[bounce_1s_infinite_0.2s]" />
+                        <span className="w-1 h-3 bg-red-400 rounded-full animate-[bounce_1s_infinite_0.4s]" />
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <p className="text-sm font-bold text-slate-400 truncate italic">
+                          {interimText || "正在聆听您的声音..."}
+                        </p>
+                      </div>
+                      <XCircle className="w-4 h-4 text-red-300 cursor-pointer" onClick={toggleListening} />
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-4 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-2xl transition-all">取消</button>
-                <button type="submit" className="flex-[2] py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl shadow-indigo-100 hover:scale-[1.02] active:scale-95 transition-all">
+                <button type="submit" disabled={isListening} className={`flex-[2] py-4 font-black rounded-2xl shadow-xl transition-all ${isListening ? 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100 hover:scale-[1.02] active:scale-95'}`}>
                   保存并开始
                 </button>
               </div>
