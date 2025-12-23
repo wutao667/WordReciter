@@ -78,12 +78,12 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
       </div>
 
       <div className="relative z-10 w-full max-w-3xl flex flex-col h-full justify-between py-10">
-        <div className="flex justify-between items-center bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10">
+        <div className="flex justify-between items-center bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 shadow-2xl">
           <button onClick={onFinish} className="flex items-center space-x-3 text-slate-400 hover:text-white transition-all group">
             <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-red-500/20 group-hover:text-red-400 transition-all">
               <X className="w-5 h-5" />
             </div>
-            <span className="font-black text-xs tracking-[0.2em] uppercase">Close Study</span>
+            <span className="font-black text-xs tracking-[0.2em] uppercase">结束听写</span>
           </button>
           
           <div className="text-right">
@@ -109,6 +109,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
                     ))}
                   </div>
                   <Headphones className={`w-12 h-12 text-indigo-500/30 ${isPlaying ? 'animate-bounce' : ''}`} />
+                  <p className="text-indigo-300/40 text-[10px] font-black uppercase tracking-[0.4em]">Listening Mode</p>
                 </div>
               )}
             </div>
@@ -118,7 +119,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
               className={`mt-12 px-10 py-5 rounded-2xl flex items-center space-x-3 transition-all duration-500 font-black text-xs uppercase tracking-widest select-none active:scale-95 ${isWordVisible ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-500/40' : 'bg-white/10 text-indigo-400 hover:bg-white/20 border border-white/5'}`}
             >
               {isWordVisible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              <span>{isWordVisible ? 'Hide Text' : 'Reveal Word'}</span>
+              <span>{isWordVisible ? '隐藏单词' : '显示单词'}</span>
             </button>
           </div>
         </div>
@@ -151,8 +152,8 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
               <div className="h-full bg-gradient-to-r from-indigo-500 via-teal-400 to-emerald-500 transition-all duration-1000 ease-out" style={{ width: `${progress}%` }} />
             </div>
             <div className="flex justify-between mt-4">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Mastery Progress</span>
-              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{Math.round(progress)}% Complete</span>
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">听写进度</span>
+              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">已完成 {Math.round(progress)}%</span>
             </div>
           </div>
         </div>

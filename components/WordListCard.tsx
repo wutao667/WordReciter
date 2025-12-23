@@ -28,7 +28,7 @@ const WordListCard: React.FC<WordListCardProps> = ({ list, onEdit, onDelete, onS
           </div>
           <div className="flex items-center space-x-1 text-slate-300">
             <Hash className="w-3 h-3" />
-            <span className="text-[10px] font-black">{list.words.length} WORDS</span>
+            <span className="text-[10px] font-black uppercase">{list.words.length} 个单词</span>
           </div>
         </div>
         <h3 className="text-2xl font-black text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
@@ -55,7 +55,7 @@ const WordListCard: React.FC<WordListCardProps> = ({ list, onEdit, onDelete, onS
           className="flex-1 bg-slate-900 group-hover:bg-indigo-600 text-white font-black py-4 rounded-[1.5rem] transition-all flex items-center justify-center gap-3 shadow-xl shadow-slate-200 group-hover:shadow-indigo-200 hover:scale-[1.05] active:scale-95"
         >
           <Play className="w-4 h-4 fill-current" />
-          <span className="text-xs uppercase tracking-widest">Start Session</span>
+          <span className="text-xs uppercase tracking-[0.2em]">开始听写</span>
         </button>
 
         <div className="flex gap-2">
