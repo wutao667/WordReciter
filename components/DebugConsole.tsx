@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Mic, Activity, Terminal, AlertCircle, RefreshCw, ShieldCheck, Copy, Check, Trash2 } from 'lucide-react';
+import { X, Mic, Activity, Terminal, AlertCircle, RefreshCw, ShieldCheck, Copy, Check, Trash2, Zap } from 'lucide-react';
 
 interface DebugConsoleProps {
   onClose: () => void;
@@ -11,19 +11,18 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   const [isMicTesting, setIsMicTesting] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [useCompatibilityMode, setUseCompatibilityMode] = useState(true);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
-  const forceEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCountRef = useRef(0);
 
-  // Fix: Ensure the cleanup function returns void by wrapping the async totalReset call in a block.
-  // React useEffect cleanup functions must return void or a destructor function that returns void.
+  // Fix: Ensure the cleanup function returns void and not a Promise by wrapping the async call.
   useEffect(() => {
-    addLog('info', '诊断控制台已启动 (v1.0.6 - Nuclear Mode)');
+    addLog('info', '诊断控制台 v1.0.7 - 驱动死锁专项补丁已应用');
     return () => {
       totalReset();
     };
@@ -32,7 +31,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   const addLog = (type: 'info' | 'success' | 'error' | 'warn' | 'event', msg: string) => {
     const now = new Date();
     const time = now.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(now.getMilliseconds()).padStart(3, '0');
-    setLogs(prev => [{ time, type, msg }, ...prev]);
+    setLogs(prev => [{ time, type, msg }, ...prev].slice(0, 100)); // 保持最近100条
   };
 
   const handleCopyLogs = async () => {
@@ -45,24 +44,19 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   };
 
   const totalReset = async () => {
-    addLog('warn', '触发硬件资源核武级重置...');
+    addLog('warn', '执行硬件链路深度重置...');
     
-    // 1. 物理流彻底断电
+    // 1. 物理流销毁
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => {
-        t.enabled = false;
-        t.stop();
-      });
+      streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
 
-    // 2. 销毁 AudioContext
+    // 2. AudioContext 销毁
     if (audioContextRef.current) {
       try {
-        if (audioContextRef.current.state !== 'closed') {
-          await audioContextRef.current.close();
-        }
+        if (audioContextRef.current.state !== 'closed') await audioContextRef.current.close();
       } catch (e) {}
       audioContextRef.current = null;
     }
@@ -70,7 +64,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     setIsMicTesting(false);
     setMicLevel(0);
 
-    // 3. 强制终止识别引擎
+    // 3. 识别引擎销毁
     if (recognitionRef.current) {
       try {
         recognitionRef.current.onstart = null;
@@ -83,15 +77,14 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     }
     
     setIsListening(false);
-    if (forceEndTimerRef.current) clearTimeout(forceEndTimerRef.current);
-
-    addLog('success', '所有底层句柄已释放');
+    if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+    addLog('success', '底层资源已释放，硬件回归初始态');
   };
 
   const startMicTest = async () => {
     try {
       await totalReset();
-      addLog('info', '正在重新拉取硬件流...');
+      addLog('info', '正在测试物理硬件...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       
@@ -115,124 +108,166 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
         rafRef.current = requestAnimationFrame(update);
       };
       update();
-      addLog('success', '物理麦克风已就绪');
+      addLog('success', '物理输入正常：硬件驱动无故障');
     } catch (err: any) {
       addLog('error', `硬件测试失败: ${err.name}`);
     }
   };
 
-  const startRecognition = async () => {
+  const startRecognition = async (isRetry = false) => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
-    await totalReset();
-    
-    // 强制冲刷：有些移动端在 AudioContext 之后需要一次“空载”来释放权限锁
-    addLog('info', '正在进行硬件通道冲刷 (Flush)...');
-    try {
-      const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      tempStream.getTracks().forEach(t => t.stop());
-    } catch(e) {}
-
-    addLog('info', '冷启动静默期 (2.5s)...');
-    await new Promise(resolve => setTimeout(resolve, 2500));
+    if (!isRetry) {
+      await totalReset();
+      retryCountRef.current = 0;
+      addLog('info', '等待 1.5s 以确保驱动程序释放...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
     recognition.continuous = false;
-    // 移动端核心：如果之前卡死，强制关闭 interimResults
-    recognition.interimResults = !useCompatibilityMode; 
+    
+    // 补丁：在移动端强行开启 interimResults 有助于激活流
+    recognition.interimResults = true; 
     recognition.maxAlternatives = 1;
 
-    addLog('info', `尝试启动识别 (Interim=${recognition.interimResults})...`);
+    addLog('info', `尝试启动识别${isRetry ? ' (重试 #' + retryCountRef.current + ')' : ''}...`);
 
     recognition.onstart = () => {
       setIsListening(true);
-      addLog('event', 'ONSTART: 识别器已挂载');
+      addLog('event', 'ONSTART: 识别器就绪，等待音频接入...');
       
-      // 启动一个 4 秒的观察者，如果还是没 ONAUDIOSTART，说明驱动层死锁了
-      forceEndTimerRef.current = setTimeout(() => {
-        addLog('error', '致命：检测到驱动死锁 (No Audio Flow)');
-        addLog('warn', '建议：刷新页面，或直接先开启“物理测试”跳动后再来测识别。');
-      }, 4000);
+      // Watchdog: 如果 3 秒内没接通音频，自动重启
+      watchdogTimerRef.current = setTimeout(() => {
+        if (retryCountRef.current < 2) {
+          addLog('warn', '检测到音频流超时，尝试自动热启动引擎...');
+          retryCountRef.current++;
+          recognition.abort(); // 触发 onend -> 然后重新 start
+        } else {
+          addLog('error', '致命：连续重试仍无音频流。请尝试：1. 刷新页面 2. 检查是否有其它 App (如微信/通话) 占用麦克风。');
+        }
+      }, 3500);
     };
 
     recognition.onaudiostart = () => {
-      addLog('success', 'ONAUDIOSTART: 音频流正式接通！');
-      if (forceEndTimerRef.current) clearTimeout(forceEndTimerRef.current);
+      addLog('success', 'ONAUDIOSTART: 音频流已打通！(关键成功节点)');
+      if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
     };
     
-    recognition.onsoundstart = () => addLog('event', '检测到声波能量');
-    recognition.onresult = (e: any) => addLog('success', `识别结果: "${e.results[e.resultIndex][0].transcript}"`);
-    recognition.onerror = (e: any) => addLog('error', `错误: ${e.error}`);
+    recognition.onsoundstart = () => addLog('event', '检测到有效声波');
+    recognition.onresult = (e: any) => addLog('success', `识别到: "${e.results[e.resultIndex][0].transcript}"`);
+    
+    recognition.onerror = (e: any) => {
+      addLog('error', `驱动报错: ${e.error}`);
+      if (e.error === 'network') addLog('warn', '移动端识别通常依赖在线服务，请检查网络');
+    };
+
     recognition.onend = () => {
       setIsListening(false);
-      addLog('event', 'ONEND: 会话结束');
-      if (forceEndTimerRef.current) clearTimeout(forceEndTimerRef.current);
+      addLog('event', 'ONEND: 识别任务结束');
+      if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+      
+      // 如果是因为超时触发的 abort，在这里重试
+      if (retryCountRef.current > 0 && retryCountRef.current <= 2 && isListening) {
+        setTimeout(() => startRecognition(true), 300);
+      }
     };
 
     try {
       recognition.start();
-      addLog('info', 'EXEC: recognition.start() 已触发');
     } catch (e: any) {
-      addLog('error', `指令执行失败: ${e.message}`);
+      addLog('error', `致命异常: ${e.message}`);
       setIsListening(false);
     }
     recognitionRef.current = recognition;
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-4xl h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-4xl h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         
         <div className="px-6 py-4 bg-slate-50 border-b flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <ShieldCheck className="w-6 h-6 text-indigo-600" />
-            <h2 className="font-black text-slate-800">语音诊断实验室 v1.0.6</h2>
+            <div className="p-2 bg-indigo-600 rounded-lg"><ShieldCheck className="w-5 h-5 text-white" /></div>
+            <div>
+              <h2 className="font-black text-slate-800 text-sm">语音驱动诊断 (v1.0.7)</h2>
+              <p className="text-[10px] text-slate-400 font-mono">Mobile Deadlock Rescue Mode</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full"><X className="w-6 h-6 text-slate-500" /></button>
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-6 h-6 text-slate-500" /></button>
         </div>
 
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-          <div className="w-full md:w-80 bg-slate-50 border-r p-6 space-y-8 overflow-y-auto">
-            <button onClick={totalReset} className="w-full py-3 bg-red-600 text-white rounded-xl font-bold flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4" /> 深度重置硬件</button>
+          {/* 左侧控制栏 */}
+          <div className="w-full md:w-72 bg-slate-50 border-r border-slate-200 p-6 space-y-6 overflow-y-auto">
+            <button onClick={totalReset} className="w-full py-3 bg-red-50 text-red-600 border border-red-200 rounded-xl font-bold text-xs hover:bg-red-100 transition-all flex items-center justify-center gap-2">
+              <RefreshCw className="w-4 h-4" /> 深度重置硬件状态
+            </button>
             
-            <section>
-              <h3 className="text-xs font-black text-slate-400 uppercase mb-3">1. 物理链路</h3>
-              <button onClick={isMicTesting ? totalReset : startMicTest} className={`w-full py-3 rounded-xl font-bold border-2 mb-3 transition-all ${isMicTesting ? 'border-red-200 text-red-600 bg-white' : 'border-slate-200 text-slate-700'}`}>
-                {isMicTesting ? '停止链路测试' : '测试物理输入'}
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">第一步：硬件连通性</h3>
+              <button 
+                onClick={isMicTesting ? totalReset : startMicTest} 
+                className={`w-full py-3 rounded-xl font-bold text-xs border-2 transition-all ${isMicTesting ? 'border-indigo-200 text-indigo-600 bg-white' : 'border-slate-200 text-slate-600'}`}
+              >
+                {isMicTesting ? '停止物理测试' : '测试物理麦克风'}
               </button>
-              <div className="h-4 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${micLevel}%` }} /></div>
-            </section>
-
-            <section className="space-y-4">
-              <h3 className="text-xs font-black text-slate-400 uppercase">2. 逻辑引擎</h3>
-              <div className="flex items-center justify-between"><span className="text-[10px] font-bold text-slate-500 uppercase">兼容模式 (推荐)</span>
-                <button onClick={() => setUseCompatibilityMode(!useCompatibilityMode)} className={`w-10 h-5 rounded-full relative transition-all ${useCompatibilityMode ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${useCompatibilityMode ? 'right-1' : 'left-1'}`} />
-                </button>
-              </div>
-              <button onClick={isListening ? totalReset : startRecognition} className={`w-full py-4 rounded-xl font-black shadow-lg flex items-center justify-center gap-2 transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-indigo-600 text-white'}`}>
-                {isListening ? <X className="w-4 h-4"/> : <Mic className="w-4 h-4"/>} {isListening ? '强制中断' : '启动识别诊断'}
-              </button>
-            </section>
-          </div>
-
-          <div className="flex-1 bg-slate-900 p-4 flex flex-col overflow-hidden">
-            <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
-              <div className="flex items-center gap-2 text-slate-500"><Terminal className="w-3.5 h-3.5" /><span className="text-[10px] font-bold uppercase">Console</span></div>
-              <div className="flex items-center gap-1">
-                <button onClick={handleCopyLogs} className={`p-2 rounded-lg transition-all ${copied ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}>{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}</button>
-                <button onClick={() => setLogs([])} className="p-2 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+              <div className="h-2 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                <div className="h-full bg-indigo-500 transition-all duration-75" style={{ width: `${micLevel}%` }} />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto font-mono text-[10px] space-y-1.5 pr-2">
+
+            <div className="space-y-4 pt-4 border-t">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">第二步：识别引擎诊断</h3>
+              <button 
+                onClick={isListening ? totalReset : () => startRecognition()} 
+                className={`w-full py-4 rounded-xl font-black text-xs shadow-xl flex items-center justify-center gap-3 transition-all ${isListening ? 'bg-amber-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+              >
+                {isListening ? <Zap className="w-4 h-4 fill-current"/> : <Mic className="w-4 h-4"/>}
+                {isListening ? '诊断中 (等待音频...)' : '开始引擎诊断'}
+              </button>
+              <p className="text-[10px] text-slate-400 leading-relaxed italic">
+                <b>注意：</b>若进入诊断 3s 后无反应，系统将尝试自动重启引擎以打通死锁的驱动。
+              </p>
+            </div>
+
+            <button onClick={() => window.location.reload()} className="w-full py-3 mt-4 text-[10px] font-black text-slate-400 hover:text-indigo-600 border border-dashed rounded-lg transition-colors">
+              终极方案：刷新整个页面
+            </button>
+          </div>
+
+          {/* 右侧终端 */}
+          <div className="flex-1 bg-slate-900 p-4 flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center mb-3 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2 text-slate-500 font-mono text-[10px]">
+                <Terminal className="w-4 h-4" /> <span>SYSTEM_DIAGNOSTICS</span>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={handleCopyLogs} className="p-2 text-slate-500 hover:text-white rounded-lg transition-colors">{copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}</button>
+                <button onClick={() => setLogs([])} className="p-2 text-slate-500 hover:text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto font-mono text-[11px] space-y-2 pr-2 custom-scrollbar">
               {logs.map((log, idx) => (
-                <div key={idx} className="flex gap-2 items-start">
-                  <span className="text-slate-600 shrink-0 opacity-50">[{log.time}]</span>
-                  <span className={`break-all ${log.type === 'error' ? 'text-red-400 font-bold' : log.type === 'success' ? 'text-emerald-400' : log.type === 'warn' ? 'text-amber-400' : log.type === 'event' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>{log.msg}</span>
+                <div key={idx} className="flex gap-3 items-start animate-in slide-in-from-left-2 duration-200">
+                  <span className="text-slate-600 shrink-0 select-none">[{log.time}]</span>
+                  <span className={`break-all ${
+                    log.type === 'error' ? 'text-red-400 font-bold' : 
+                    log.type === 'success' ? 'text-emerald-400' : 
+                    log.type === 'warn' ? 'text-amber-400' : 
+                    log.type === 'event' ? 'text-indigo-400 font-bold' : 'text-slate-300'
+                  }`}>
+                    {log.type === 'event' ? '> ' : ''}{log.msg}
+                  </span>
                 </div>
               ))}
+              {logs.length === 0 && (
+                <div className="h-full flex items-center justify-center text-slate-700 text-[10px] font-black uppercase tracking-tighter italic">
+                  Waiting for initial trigger...
+                </div>
+              )}
             </div>
           </div>
         </div>
