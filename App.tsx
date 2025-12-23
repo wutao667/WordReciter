@@ -3,74 +3,40 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import { Plus, Mic, Library, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout } from 'lucide-react';
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingList, setEditingList] = useState<WordList | null>(null);
   const [currentStudyListId, setCurrentStudyListId] = useState<string | null>(null);
-  
   const [listName, setListName] = useState('');
   const [wordsInput, setWordsInput] = useState('');
-  
-  // Speech Recognition State
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('lingo-echo-lists');
-    if (saved) {
-      try {
-        setLists(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to load saved lists");
-      }
-    }
+    if (saved) try { setLists(JSON.parse(saved)); } catch (e) {}
 
-    // Initialize Speech Recognition
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
-      recognition.interimResults = false;
       recognition.lang = 'en-US';
-
       recognition.onstart = () => setIsListening(true);
       recognition.onend = () => setIsListening(false);
-      recognition.onerror = () => setIsListening(false);
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          setWordsInput(prev => {
-            const separator = prev.trim() === '' ? '' : '\n';
-            return prev + separator + transcript;
-          });
-        }
+      recognition.onresult = (e: any) => {
+        const text = e.results[0][0].transcript;
+        if (text) setWordsInput(prev => prev + (prev.trim() ? '\n' : '') + text);
       };
       recognitionRef.current = recognition;
     }
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('lingo-echo-lists', JSON.stringify(lists));
-  }, [lists]);
+  useEffect(() => { localStorage.setItem('lingo-echo-lists', JSON.stringify(lists)); }, [lists]);
 
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      alert('您的浏览器不支持语音识别功能。');
-      return;
-    }
-    if (isListening) {
-      recognitionRef.current.stop();
-    } else {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error("Recognition start error", e);
-      }
-    }
-  };
+  const toggleListening = () => isListening ? recognitionRef.current?.stop() : recognitionRef.current?.start();
 
   const handleOpenModal = (list: WordList | null = null) => {
     if (list) {
@@ -87,193 +53,115 @@ const App: React.FC = () => {
 
   const handleSaveList = (e: React.FormEvent) => {
     e.preventDefault();
-    const words = wordsInput
-      .split(/[\n,;\s]+/)
-      .map(w => w.trim())
-      .filter(w => w !== '');
-
+    const words = wordsInput.split(/[\n,;\s]+/).map(w => w.trim()).filter(w => w);
     if (!listName || words.length === 0) return;
-
     if (editingList) {
       setLists(prev => prev.map(l => l.id === editingList.id ? { ...l, name: listName, words } : l));
     } else {
-      const newList: WordList = {
-        id: crypto.randomUUID(),
-        name: listName,
-        words,
-        createdAt: Date.now()
-      };
-      setLists(prev => [newList, ...prev]);
+      setLists(prev => [{ id: crypto.randomUUID(), name: listName, words, createdAt: Date.now() }, ...prev]);
     }
     setIsModalOpen(false);
-  };
-
-  const handleDeleteList = (id: string) => {
-    if (window.confirm('确定要删除这个词单吗？')) {
-      setLists(prev => prev.filter(l => l.id !== id));
-    }
-  };
-
-  const startStudy = (id: string) => {
-    setCurrentStudyListId(id);
   };
 
   const currentStudyList = lists.find(l => l.id === currentStudyListId);
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#f4faf7]">
-      {/* 背景光晕装饰 - 增强了颜色可见度 */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10">
-        <div className="absolute top-[-10%] left-[-15%] w-[60%] h-[60%] bg-emerald-300/30 rounded-full blur-[100px] animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-teal-300/30 rounded-full blur-[100px]" />
-        <div className="absolute top-[20%] right-[5%] w-[30%] h-[30%] bg-green-300/20 rounded-full blur-[80px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[100%] bg-gradient-to-b from-transparent via-emerald-50/50 to-transparent" />
-      </div>
-
-      <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-emerald-100/50 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200/60 flex-shrink-0">
-            <Mic className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex flex-col">
-            <h1 className="text-xl font-black tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-emerald-900 to-teal-800">
-              LingoEcho
-            </h1>
-            <div className="flex items-center text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1">
-              <Sparkles className="w-2.5 h-2.5 mr-1" />
-              语音录入听写
+    <div className="min-h-screen pb-20">
+      {/* 顶部导航 */}
+      <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-slate-200/50 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+              <Zap className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-2xl font-black tracking-tight text-slate-900 leading-none">LingoEcho</span>
+              <div className="flex items-center gap-1.5 mt-1">
+                <Sparkles className="w-3 h-3 text-indigo-500" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">语音录入听写</span>
+              </div>
             </div>
           </div>
+          <button 
+            onClick={() => handleOpenModal()}
+            className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-200 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4 stroke-[3px]" />
+            <span className="hidden sm:inline">新建词单</span>
+          </button>
         </div>
-        
-        <button 
-          onClick={() => handleOpenModal()}
-          className="bg-emerald-900 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl shadow-emerald-200/50 flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">新建词单</span>
-        </button>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
-        <header className="mb-16 text-center sm:text-left">
-          <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4 tracking-tight">我的学习库</h2>
-          <p className="text-slate-500 font-medium text-lg max-w-2xl">构建你的专属词单，在清新的环境下高效记忆。</p>
-        </header>
+      {/* 主体内容 */}
+      <main className="max-w-7xl mx-auto px-6 mt-16">
+        <div className="mb-16">
+          <h2 className="text-5xl sm:text-6xl font-black text-slate-900 tracking-tighter mb-4">
+            你的 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-emerald-500">单词工坊</span>
+          </h2>
+          <p className="text-slate-500 text-xl font-medium">让记忆回归纯粹，用声音唤醒认知。</p>
+        </div>
 
         {lists.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 bg-white/60 backdrop-blur-md rounded-[3rem] border border-white/50 shadow-2xl shadow-emerald-100/30">
-            <div className="w-24 h-24 bg-gradient-to-b from-emerald-50 to-teal-100 rounded-3xl flex items-center justify-center mb-8 ring-1 ring-emerald-200/50">
-              <Library className="w-10 h-10 text-emerald-400" />
+          <div className="py-24 bg-white/40 backdrop-blur-xl rounded-[3rem] border border-white/60 shadow-2xl shadow-indigo-100/20 flex flex-col items-center">
+            <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mb-6">
+              <Layout className="w-10 h-10 text-indigo-300" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-2">库中还没有单词</h3>
-            <p className="text-slate-500 mb-10 max-w-xs text-center font-medium">点击上方按钮，开始创建你的第一个绿色学习词单。</p>
-            <button 
-              onClick={() => handleOpenModal()}
-              className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-lg flex items-center space-x-3"
-            >
-              <Plus className="w-5 h-5" />
-              <span>立即创建</span>
-            </button>
+            <h3 className="text-2xl font-bold text-slate-800 mb-2">暂无词单</h3>
+            <p className="text-slate-400 mb-8 font-medium">点击右上角按钮开启你的学习之旅</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {lists.map(list => (
               <WordListCard 
-                key={list.id} 
-                list={list} 
+                key={list.id} list={list} onSelect={setCurrentStudyListId}
                 onEdit={handleOpenModal}
-                onDelete={handleDeleteList}
-                onSelect={startStudy}
+                onDelete={(id) => setLists(prev => prev.filter(l => l.id !== id))}
               />
             ))}
           </div>
         )}
       </main>
 
+      {/* 弹窗设计 */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-emerald-950/20 backdrop-blur-lg" onClick={() => setIsModalOpen(false)} />
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden relative animate-in zoom-in-95 duration-300 border border-emerald-50">
-            <div className="px-10 py-8 border-b border-emerald-50 flex justify-between items-center bg-emerald-50/30">
-              <h2 className="text-2xl font-black text-slate-900">{editingList ? '编辑词单' : '创建新词单'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-100 text-slate-400 transition-colors">
-                <Plus className="w-6 h-6 rotate-45" />
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/20 backdrop-blur-md">
+          <div className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl w-full max-w-xl border border-white overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center">
+              <h2 className="text-2xl font-black">{editingList ? '编辑词单' : '新建词单'}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-red-500 p-2"><Plus className="w-8 h-8 rotate-45" /></button>
             </div>
-            <form onSubmit={handleSaveList} className="p-10">
-              <div className="mb-8">
-                <label className="block text-sm font-black text-emerald-800 mb-3 ml-1 uppercase tracking-wider">词单名称</label>
+            <form onSubmit={handleSaveList} className="p-10 space-y-8">
+              <div>
+                <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest block mb-2 ml-1">词单名称 Title</label>
                 <input 
-                  type="text" 
-                  autoFocus
-                  required
-                  value={listName}
-                  onChange={(e) => setListName(e.target.value)}
-                  placeholder="例如：雅思核心词汇"
-                  className="w-full px-6 py-4 rounded-2xl bg-emerald-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all font-bold text-slate-800"
+                  required value={listName} onChange={e => setListName(e.target.value)}
+                  placeholder="如：核心词汇"
+                  className="w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 border-transparent focus:bg-white focus:border-indigo-500 outline-none font-bold text-lg"
                 />
               </div>
-              <div className="mb-10 relative">
-                <div className="flex justify-between items-center mb-3 ml-1">
-                  <label className="block text-sm font-black text-emerald-800 uppercase tracking-wider">单词列表</label>
-                  <button 
-                    type="button"
-                    onClick={toggleListening}
-                    className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-black transition-all ${
-                      isListening 
-                      ? 'bg-red-500 text-white animate-pulse' 
-                      : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                    }`}
-                  >
-                    {isListening ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        <span>正在聆听...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-3 h-3" />
-                        <span>语音录入</span>
-                      </>
-                    )}
+              <div>
+                <div className="flex justify-between mb-2 ml-1">
+                  <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">单词明细 Words</label>
+                  <button type="button" onClick={toggleListening} className={`text-[10px] font-black px-3 py-1 rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
+                    {isListening ? '正在监听...' : '语音录入'}
                   </button>
                 </div>
                 <textarea 
-                  required
-                  value={wordsInput}
-                  onChange={(e) => setWordsInput(e.target.value)}
-                  rows={6}
-                  placeholder="手动输入或点击语音录入，单词间用空格、逗号或回车分隔..."
-                  className="w-full px-6 py-4 rounded-2xl bg-emerald-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all resize-none font-medium text-slate-700"
+                  required value={wordsInput} onChange={e => setWordsInput(e.target.value)}
+                  rows={5} placeholder="输入单词，分隔符不限..."
+                  className="w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 border-transparent focus:bg-white focus:border-indigo-500 outline-none font-bold text-lg resize-none"
                 />
               </div>
               <div className="flex gap-4">
-                <button 
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-4 text-slate-500 font-bold hover:bg-emerald-50 rounded-2xl transition-all"
-                >
-                  取消
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-xl shadow-emerald-200 transition-all"
-                >
-                  保存并开始
-                </button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 font-bold text-slate-400 hover:bg-slate-100 rounded-2xl">取消</button>
+                <button type="submit" className="flex-[2] py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl shadow-indigo-100">保存并开始</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {currentStudyList && (
-        <StudySession 
-          list={currentStudyList} 
-          onFinish={() => setCurrentStudyListId(null)} 
-        />
-      )}
+      {currentStudyList && <StudySession list={currentStudyList} onFinish={() => setCurrentStudyListId(null)} />}
     </div>
   );
 };

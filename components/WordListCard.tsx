@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { WordList } from '../types';
-import { Edit2, Trash2, PlayCircle } from 'lucide-react';
+import { Edit3, Trash2, Play, Hash } from 'lucide-react';
 
 interface WordListCardProps {
   list: WordList;
@@ -11,78 +11,67 @@ interface WordListCardProps {
 }
 
 const WordListCard: React.FC<WordListCardProps> = ({ list, onEdit, onDelete, onSelect }) => {
-  const dateTimeStr = new Date(list.createdAt).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).replace(/\//g, '-');
+  const dateTimeStr = new Date(list.createdAt).toLocaleDateString('zh-CN', {
+    month: 'short',
+    day: 'numeric'
+  });
 
   return (
-    <div className="group relative bg-white rounded-[2.5rem] border border-white/50 p-7 shadow-xl shadow-slate-200/40 hover:shadow-2xl hover:shadow-emerald-500/10 hover:-translate-y-2 transition-all duration-500 flex flex-col h-full">
-      {/* Header & Meta */}
-      <div className="mb-4">
-        <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1">
-          <h3 className="text-xl font-black text-slate-900 group-hover:text-emerald-700 transition-colors duration-300">
-            {list.name}
-          </h3>
-          <span className="text-[11px] text-slate-400 font-medium tracking-tight">
+    <div className="group relative bg-white/60 backdrop-blur-md rounded-[3rem] border border-white p-8 shadow-xl shadow-indigo-100/30 hover:shadow-2xl hover:shadow-indigo-200/40 hover:-translate-y-3 transition-all duration-500 flex flex-col h-full overflow-hidden">
+      {/* 装饰性背景 */}
+      <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-50 rounded-full blur-3xl group-hover:bg-indigo-100 transition-colors" />
+      
+      <div className="relative mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <div className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-500 text-[10px] font-black uppercase tracking-widest">
             {dateTimeStr}
-          </span>
+          </div>
+          <div className="flex items-center space-x-1 text-slate-300">
+            <Hash className="w-3 h-3" />
+            <span className="text-[10px] font-black">{list.words.length} WORDS</span>
+          </div>
         </div>
+        <h3 className="text-2xl font-black text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+          {list.name}
+        </h3>
       </div>
       
-      {/* Preview directly under title */}
-      <div className="flex flex-wrap items-center gap-x-1 gap-y-2 mb-8 flex-1">
-        <div className="flex flex-wrap items-center gap-1">
-          {list.words.slice(0, 3).map((word, idx, arr) => (
-            <React.Fragment key={idx}>
-              <span className="text-slate-500 text-sm font-semibold italic">
-                {word}
-              </span>
-              {idx < arr.length - 1 && (
-                <span className="text-slate-300 font-bold">,</span>
-              )}
-            </React.Fragment>
-          ))}
-          {list.words.length > 3 && (
-            <>
-              <span className="text-slate-300 font-bold">,</span>
-              <span className="ml-1 text-[10px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-md uppercase tracking-tighter">
-                +{list.words.length - 3} 词
-              </span>
-            </>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center gap-2 mb-10 flex-1">
+        {list.words.slice(0, 4).map((word, idx) => (
+          <span key={idx} className="px-3 py-1.5 rounded-xl bg-white/80 border border-slate-100 text-slate-500 text-xs font-bold shadow-sm italic">
+            {word}
+          </span>
+        ))}
+        {list.words.length > 4 && (
+          <span className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-black shadow-lg shadow-indigo-100">
+            +{list.words.length - 4}
+          </span>
+        )}
       </div>
 
-      {/* Actions row at the bottom */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4 relative">
         <button 
           onClick={() => onSelect(list.id)}
-          className="flex-1 bg-emerald-900 group-hover:bg-emerald-700 text-white font-black py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 shadow-lg shadow-emerald-100 group-hover:shadow-emerald-200 hover:scale-[1.02] active:scale-95"
+          className="flex-1 bg-slate-900 group-hover:bg-indigo-600 text-white font-black py-4 rounded-[1.5rem] transition-all flex items-center justify-center gap-3 shadow-xl shadow-slate-200 group-hover:shadow-indigo-200 hover:scale-[1.05] active:scale-95"
         >
-          <PlayCircle className="w-5 h-5" />
-          <span className="text-sm uppercase tracking-wide">开始播报</span>
+          <Play className="w-4 h-4 fill-current" />
+          <span className="text-xs uppercase tracking-widest">Start Session</span>
         </button>
 
-        <button 
-          onClick={() => onEdit(list)}
-          title="编辑词单"
-          className="w-14 h-14 flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 border border-slate-100 rounded-2xl transition-all active:scale-90"
-        >
-          <Edit2 className="w-5 h-5" />
-        </button>
-
-        <button 
-          onClick={() => onDelete(list.id)}
-          title="删除词单"
-          className="w-14 h-14 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-100 rounded-2xl transition-all active:scale-90"
-        >
-          <Trash2 className="w-5 h-5" />
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => onEdit(list)}
+            className="w-12 h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-white rounded-2xl transition-all active:scale-90 border border-transparent hover:border-indigo-100 shadow-sm hover:shadow-md"
+          >
+            <Edit3 className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => onDelete(list.id)}
+            className="w-12 h-12 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-white rounded-2xl transition-all active:scale-90 border border-transparent hover:border-red-100 shadow-sm hover:shadow-md"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        </div>
       </div>
     </div>
   );
