@@ -14,18 +14,19 @@ const App: React.FC = () => {
   const [wordsInput, setWordsInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [listeningLang, setListeningLang] = useState<'en-US' | 'zh-CN'>('en-US');
-  const [interimText, setInterimText] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [interimText, setInterimText] = useState('');
   
   const recognitionRef = useRef<any>(null);
   const manualStopRef = useRef(false);
-  const isListeningRef = useRef(false); // 使用 Ref 同步实际运行状态，避免闭包过时
+  const isListeningRef = useRef(false); 
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); 
+  const pendingLangRef = useRef<'en-US' | 'zh-CN' | null>(null); // 用于处理切换语言的等待状态
 
   useEffect(() => {
     const saved = localStorage.getItem('lingo-echo-lists');
     if (saved) try { setLists(JSON.parse(saved)); } catch (e) {}
 
-    // 初始化语音识别对象，仅执行一次
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
@@ -39,7 +40,15 @@ const App: React.FC = () => {
       };
 
       recognition.onend = () => {
-        // 如果不是手动停止，且我们希望它还在运行，则尝试重启（移动端适配）
+        // 核心逻辑：如果存在待处理的切换请求
+        if (pendingLangRef.current) {
+          const nextLang = pendingLangRef.current;
+          pendingLangRef.current = null;
+          startListening(nextLang);
+          return;
+        }
+
+        // 如果是由于 0.5s 静默触发的自动停止，且不是手动关闭，则立即重启
         if (!manualStopRef.current && isListeningRef.current) {
           try {
             recognition.start();
@@ -60,6 +69,7 @@ const App: React.FC = () => {
           setErrorMsg('请允许麦克风权限以使用语音录入');
           setIsListening(false);
           isListeningRef.current = false;
+          pendingLangRef.current = null;
         } else if (event.error === 'network') {
           setErrorMsg('网络异常，请检查网络连接');
         }
@@ -86,14 +96,26 @@ const App: React.FC = () => {
             return prev.trim() ? `${prev}\n${trimmed}` : trimmed;
           });
         }
+
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        
+        if (currentInterim.trim() || finalBatch.trim()) {
+          silenceTimerRef.current = setTimeout(() => {
+            if (isListeningRef.current && !manualStopRef.current && !pendingLangRef.current) {
+              recognition.stop();
+            }
+          }, 500);
+        }
       };
       recognitionRef.current = recognition;
     }
-  }, []); // 仅挂载时初始化一次
+  }, []);
 
   useEffect(() => { localStorage.setItem('lingo-echo-lists', JSON.stringify(lists)); }, [lists]);
 
   const stopListening = () => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    pendingLangRef.current = null;
     if (recognitionRef.current) {
       manualStopRef.current = true;
       isListeningRef.current = false;
@@ -105,24 +127,25 @@ const App: React.FC = () => {
 
   const toggleListening = (lang: 'en-US' | 'zh-CN') => {
     if (!recognitionRef.current) {
-      alert('您的浏览器暂不支持语音识别功能。若在 iOS 上，请确保使用 Safari 浏览器并处于 HTTPS 环境。');
+      alert('您的浏览器暂不支持语音识别功能。');
       return;
     }
 
     if (isListening) {
       if (listeningLang === lang) {
-        // 如果语言相同，则直接停止
+        // 点击同一个按钮 -> 停止
         stopListening();
-        return;
       } else {
-        // 如果切换语言，先完全停止上一个
-        stopListening();
-        // 给浏览器一点点喘息时间再开启新语言识别（移动端手势必须连续）
-        setTimeout(() => {
-          startListening(lang);
-        }, 100);
-        return;
+        // 点击另一个语言按钮 -> 标记并停止，等待 onend 重启
+        manualStopRef.current = true;
+        isListeningRef.current = false;
+        pendingLangRef.current = lang;
+        recognitionRef.current.stop();
+        // UI 立即反馈切换中
+        setListeningLang(lang);
+        setInterimText('正在切换语言...');
       }
+      return;
     }
 
     startListening(lang);
@@ -176,7 +199,7 @@ const App: React.FC = () => {
       setLists(prev => [{ id: crypto.randomUUID(), name: finalName, words, createdAt: Date.now() }, ...prev]);
     }
     setIsModalOpen(false);
-    stopListening(); // 保存时确保停止录音
+    stopListening();
   };
 
   const currentStudyList = lists.find(l => l.id === currentStudyListId);
@@ -267,8 +290,9 @@ const App: React.FC = () => {
                   <div className="flex gap-2">
                     <button 
                       type="button" 
+                      disabled={pendingLangRef.current !== null}
                       onClick={() => toggleListening('en-US')} 
-                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 disabled:opacity-50'}`}
                     >
                       {isListening && listeningLang === 'en-US' && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
                       <Mic className="w-3 h-3" />
@@ -277,8 +301,9 @@ const App: React.FC = () => {
                     
                     <button 
                       type="button" 
+                      disabled={pendingLangRef.current !== null}
                       onClick={() => toggleListening('zh-CN')} 
-                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}
+                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 disabled:opacity-50'}`}
                     >
                       {isListening && listeningLang === 'zh-CN' && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
                       <Languages className="w-3 h-3" />
