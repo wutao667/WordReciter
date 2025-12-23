@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages } from 'lucide-react';
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
@@ -13,6 +13,7 @@ const App: React.FC = () => {
   const [listName, setListName] = useState('');
   const [wordsInput, setWordsInput] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [listeningLang, setListeningLang] = useState<'en-US' | 'zh-CN'>('en-US');
   const [interimText, setInterimText] = useState(''); // 实时显示的识别内容
   const recognitionRef = useRef<any>(null);
 
@@ -20,13 +21,11 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('lingo-echo-lists');
     if (saved) try { setLists(JSON.parse(saved)); } catch (e) {}
 
-    // 初始化语音识别
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
-      recognition.continuous = true; // 开启持续识别，用户可以一口气说多个单词
-      recognition.interimResults = true; // 开启临时结果，实现实时显示
-      recognition.lang = 'en-US';
+      recognition.continuous = true;
+      recognition.interimResults = true;
 
       recognition.onstart = () => {
         setIsListening(true);
@@ -40,7 +39,7 @@ const App: React.FC = () => {
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        if (event.error !== 'no-speech') { // 忽略无声音报错，避免频繁弹窗
+        if (event.error !== 'no-speech') {
           setIsListening(false);
           setInterimText('');
         }
@@ -58,10 +57,8 @@ const App: React.FC = () => {
           }
         }
 
-        // 更新临时预览
         setInterimText(currentInterim);
 
-        // 如果有最终确定的文本，追加到输入框
         if (finalBatch) {
           setWordsInput(prev => {
             const trimmed = finalBatch.trim();
@@ -76,25 +73,26 @@ const App: React.FC = () => {
 
   useEffect(() => { localStorage.setItem('lingo-echo-lists', JSON.stringify(lists)); }, [lists]);
 
-  const toggleListening = () => {
+  const toggleListening = (lang: 'en-US' | 'zh-CN') => {
     if (!recognitionRef.current) {
-      alert('您的浏览器暂不支持语音识别功能，请尝试使用 Chrome 或 Safari。');
+      alert('您的浏览器暂不支持语音识别功能。');
       return;
     }
 
     if (isListening) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-      setIsListening(false);
-      setInterimText('');
-    } else {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error('Start recognition failed:', e);
-        setIsListening(false);
+      recognitionRef.current.stop();
+      // 如果点击的是不同的语言，则在停止后重新启动
+      if (listeningLang !== lang) {
+        setTimeout(() => {
+          recognitionRef.current.lang = lang;
+          setListeningLang(lang);
+          recognitionRef.current.start();
+        }, 300);
       }
+    } else {
+      recognitionRef.current.lang = lang;
+      setListeningLang(lang);
+      recognitionRef.current.start();
     }
   };
 
@@ -169,7 +167,7 @@ const App: React.FC = () => {
             你的 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-emerald-500">单词工坊</span>
           </h2>
           <p className="text-slate-500 text-xl font-medium max-w-xl">
-            更时尚的单词记忆方式。告别机械录入，让声音与视觉完美融合。
+            更时尚的单词记忆方式。支持中英双语语音录入，让录入效率翻倍。
           </p>
         </div>
 
@@ -212,44 +210,62 @@ const App: React.FC = () => {
                 <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest block mb-2 ml-1">词单主题 Title</label>
                 <input 
                   value={listName} onChange={e => setListName(e.target.value)}
-                  placeholder="例如：核心 3000 词 (留空将以当前时间命名)"
+                  placeholder="留空将以当前日期命名"
                   className="w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 border-transparent focus:bg-white focus:border-indigo-500 outline-none font-bold text-lg transition-all"
                 />
               </div>
               <div>
-                <div className="flex justify-between mb-2 ml-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 ml-1">
                   <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">词汇明细 Vocabulary</label>
-                  <button 
-                    type="button" 
-                    onClick={toggleListening} 
-                    className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening ? 'bg-red-500 text-white shadow-lg shadow-red-200 scale-105' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
-                  >
-                    {isListening && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
-                    {isListening ? <><Loader2 className="w-3 h-3 animate-spin" /><span>停止录入</span></> : <><Mic className="w-3 h-3" /><span>语音连续录入</span></>}
-                  </button>
+                  <div className="flex gap-2">
+                    {/* 英文录入按钮 */}
+                    <button 
+                      type="button" 
+                      onClick={() => toggleListening('en-US')} 
+                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                    >
+                      {isListening && listeningLang === 'en-US' && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
+                      <Mic className="w-3 h-3" />
+                      <span>{isListening && listeningLang === 'en-US' ? '正在录入英文...' : '录入英文'}</span>
+                    </button>
+                    
+                    {/* 中文录入按钮 */}
+                    <button 
+                      type="button" 
+                      onClick={() => toggleListening('zh-CN')} 
+                      className={`relative text-[10px] font-black px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 overflow-hidden ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}
+                    >
+                      {isListening && listeningLang === 'zh-CN' && <span className="absolute inset-0 bg-white/20 animate-ping opacity-50" />}
+                      <Languages className="w-3 h-3" />
+                      <span>{isListening && listeningLang === 'zh-CN' ? '正在录入中文...' : '录入中文'}</span>
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="relative group">
                   <textarea 
                     required value={wordsInput} onChange={e => setWordsInput(e.target.value)}
-                    rows={5} placeholder="点击上方“语音连续录入”或手动输入..."
-                    className={`w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 outline-none font-bold text-lg resize-none transition-all shadow-inner ${isListening ? 'border-red-200 bg-red-50/10' : 'border-transparent focus:bg-white focus:border-indigo-500'}`}
+                    rows={5} placeholder="手动输入或点击上方语音录入..."
+                    className={`w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 outline-none font-bold text-lg resize-none transition-all shadow-inner ${isListening ? (listeningLang === 'en-US' ? 'border-indigo-200 bg-indigo-50/10' : 'border-emerald-200 bg-emerald-50/10') : 'border-transparent focus:bg-white focus:border-indigo-500'}`}
                   />
                   
                   {/* 实时反馈浮层 */}
                   {isListening && (
-                    <div className="absolute inset-x-0 -bottom-2 translate-y-full px-4 py-3 bg-white border border-red-100 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
+                    <div className={`absolute inset-x-0 -bottom-2 translate-y-full px-4 py-3 bg-white border rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 ${listeningLang === 'en-US' ? 'border-indigo-100' : 'border-emerald-100'}`}>
                       <div className="flex gap-1">
-                        <span className="w-1 h-3 bg-red-400 rounded-full animate-[bounce_1s_infinite]" />
-                        <span className="w-1 h-3 bg-red-400 rounded-full animate-[bounce_1s_infinite_0.2s]" />
-                        <span className="w-1 h-3 bg-red-400 rounded-full animate-[bounce_1s_infinite_0.4s]" />
+                        <span className={`w-1.5 h-4 rounded-full animate-[bounce_1s_infinite] ${listeningLang === 'en-US' ? 'bg-indigo-400' : 'bg-emerald-400'}`} />
+                        <span className={`w-1.5 h-4 rounded-full animate-[bounce_1s_infinite_0.2s] ${listeningLang === 'en-US' ? 'bg-indigo-400' : 'bg-emerald-400'}`} />
+                        <span className={`w-1.5 h-4 rounded-full animate-[bounce_1s_infinite_0.4s] ${listeningLang === 'en-US' ? 'bg-indigo-400' : 'bg-emerald-400'}`} />
                       </div>
                       <div className="flex-1 overflow-hidden">
-                        <p className="text-sm font-bold text-slate-400 truncate italic">
-                          {interimText || "正在聆听您的声音..."}
+                        <p className="text-sm font-bold text-slate-500 truncate italic">
+                          <span className="mr-2 opacity-40 font-black">[{listeningLang === 'en-US' ? 'EN' : '中'}]</span>
+                          {interimText || "正在聆听..."}
                         </p>
                       </div>
-                      <XCircle className="w-4 h-4 text-red-300 cursor-pointer" onClick={toggleListening} />
+                      <button type="button" onClick={() => toggleListening(listeningLang)} className="text-slate-300 hover:text-red-500 transition-colors">
+                        <XCircle className="w-5 h-5" />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -257,7 +273,7 @@ const App: React.FC = () => {
               <div className="flex gap-4 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-2xl transition-all">取消</button>
                 <button type="submit" disabled={isListening} className={`flex-[2] py-4 font-black rounded-2xl shadow-xl transition-all ${isListening ? 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100 hover:scale-[1.02] active:scale-95'}`}>
-                  保存并开始
+                  完成并保存
                 </button>
               </div>
             </form>
