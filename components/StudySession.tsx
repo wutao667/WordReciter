@@ -22,7 +22,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-  // 停止当前所有语音播放及逻辑循环
   const stopAllAudio = useCallback(() => {
     if (currentSourceRef.current) {
       try {
@@ -85,9 +84,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     try {
       for (let i = 0; i < 3; i++) {
         if (controller.signal.aborted || !isComponentMounted.current) break;
-        
         await playCurrentWordOnce();
-        
         if (i < 2 && !controller.signal.aborted && isComponentMounted.current) {
           await delay(1000); 
         }
@@ -135,14 +132,14 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const progress = ((currentIndex + 1) / shuffledWords.length) * 100;
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center p-6 sm:p-12 overflow-hidden bg-slate-900">
-      {/* 动态背景 */}
-      <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center p-6 sm:p-12 overflow-hidden bg-green-50">
+      {/* 淡绿色装饰背景 */}
+      <div className="absolute inset-0 overflow-hidden opacity-40 pointer-events-none">
         <div 
-          className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-500 rounded-full blur-[150px] transition-all duration-1000" 
+          className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-emerald-200 rounded-full blur-[150px] transition-all duration-1000" 
           style={{ transform: `translate(${progress / 2}%, ${progress / 5}%)` }}
         />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-violet-600 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-teal-200 rounded-full blur-[120px]" />
       </div>
 
       <div className="relative z-10 w-full max-w-2xl flex flex-col h-full justify-between">
@@ -150,60 +147,56 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         <div className="flex justify-between items-center">
           <button 
             onClick={onFinish}
-            className="group flex items-center space-x-2 text-slate-400 hover:text-white transition-colors"
+            className="group flex items-center space-x-2 text-slate-500 hover:text-emerald-700 transition-colors"
           >
-            <div className="w-10 h-10 rounded-full border border-slate-700 flex items-center justify-center group-hover:border-slate-500 transition-all">
+            <div className="w-10 h-10 rounded-full border border-emerald-200 flex items-center justify-center group-hover:bg-emerald-100 transition-all">
               <X className="w-5 h-5" />
             </div>
-            <span className="font-bold text-sm tracking-wide uppercase">退出练习</span>
+            <span className="font-bold text-sm tracking-wide uppercase">退出</span>
           </button>
           
           <div className="text-right">
-            <div className="text-slate-500 text-xs font-black uppercase tracking-widest mb-1">{list.name}</div>
-            <div className="text-white font-mono text-lg font-bold">
-              <span className="text-indigo-400">{currentIndex + 1}</span>
-              <span className="text-slate-600 mx-1">/</span>
-              <span className="text-slate-400">{shuffledWords.length}</span>
+            <div className="text-emerald-700 text-xs font-black uppercase tracking-widest mb-1">{list.name}</div>
+            <div className="text-slate-900 font-mono text-lg font-bold">
+              <span className="text-emerald-600">{currentIndex + 1}</span>
+              <span className="text-slate-300 mx-1">/</span>
+              <span className="text-slate-500">{shuffledWords.length}</span>
             </div>
           </div>
         </div>
 
-        {/* Word Display Area: 使用显式的条件渲染 */}
+        {/* Word Display Area */}
         <div className="flex-1 flex flex-col items-center justify-center py-12">
           <div 
-            className={`w-full aspect-[4/3] sm:aspect-video rounded-[3rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-2xl transition-all duration-500 ${isPlaying ? 'scale-[1.02] border-white/20' : ''}`}
+            className={`w-full aspect-[4/3] sm:aspect-video rounded-[3rem] bg-white/80 backdrop-blur-3xl border border-emerald-100 flex flex-col items-center justify-center p-8 sm:p-12 relative shadow-2xl shadow-emerald-200/50 transition-all duration-500 ${isPlaying ? 'scale-[1.02] ring-4 ring-emerald-500/10' : ''}`}
           >
-            <div className={`absolute inset-0 bg-indigo-500/5 rounded-[3rem] transition-opacity duration-1000 ${isPlaying ? 'opacity-100' : 'opacity-0'}`} />
-
-            <div className="relative text-center w-full min-h-[8rem] flex flex-col items-center justify-center">
+            {/* 固定高度容器 (h-48) 确保布局不随内容切换而改变 */}
+            <div className="relative text-center w-full h-48 sm:h-56 flex flex-col items-center justify-center">
               {isWordVisible ? (
-                /* 点击时：显示实际单词 */
-                <h1 className="text-6xl sm:text-8xl font-black tracking-tighter text-white animate-in fade-in zoom-in duration-300">
-                  {shuffledWords[currentIndex]}
-                </h1>
+                <div className="flex flex-col items-center justify-center h-full">
+                  <h1 className="text-5xl sm:text-7xl md:text-8xl font-black tracking-tighter text-emerald-900 animate-in fade-in zoom-in duration-300 break-all px-4">
+                    {shuffledWords[currentIndex]}
+                  </h1>
+                </div>
               ) : (
-                /* 默认：显示 *** 和状态信息 */
-                <div className="flex flex-col items-center justify-center animate-in fade-in duration-300">
-                  <div className="text-indigo-500/30 text-6xl sm:text-8xl font-black tracking-[0.2em] animate-pulse">
+                <div className="flex flex-col items-center justify-center h-full animate-in fade-in duration-300">
+                  <div className="text-emerald-200 text-6xl sm:text-8xl font-black tracking-[0.2em] animate-pulse">
                     ***
                   </div>
-                  <div className="mt-4 text-indigo-400/50 text-sm font-bold tracking-widest uppercase">
-                    {isPlaying ? '正在播报中...' : '播报已暂停'}
+                  <div className="mt-4 text-emerald-600/60 text-sm font-bold tracking-widest uppercase">
+                    {isPlaying ? '正在循环朗读...' : '已暂停'}
                   </div>
                 </div>
               )}
             </div>
 
+            {/* 这里的 margin 会相对于固定高度的容器，点击切换显示状态 */}
             <button
-              onMouseDown={() => setIsWordVisible(true)}
-              onMouseUp={() => setIsWordVisible(false)}
-              onMouseLeave={() => setIsWordVisible(false)}
-              onTouchStart={() => setIsWordVisible(true)}
-              onTouchEnd={() => setIsWordVisible(false)}
-              className={`mt-12 px-8 py-4 rounded-2xl flex items-center space-x-3 transition-all duration-300 font-black text-sm uppercase tracking-wider ${isWordVisible ? 'bg-white text-slate-900 shadow-xl' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+              onClick={() => setIsWordVisible(!isWordVisible)}
+              className={`mt-8 sm:mt-12 px-8 py-4 rounded-2xl flex items-center space-x-3 transition-all duration-300 font-black text-sm uppercase tracking-wider select-none active:scale-95 ${isWordVisible ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
             >
               {isWordVisible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              <span>按住显示单词</span>
+              <span>{isWordVisible ? '隐藏单词' : '点击显示单词'}</span>
             </button>
           </div>
         </div>
@@ -214,20 +207,20 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
             <button 
               onClick={handlePrevious}
               disabled={currentIndex === 0}
-              className="w-16 h-16 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-90"
+              className="w-16 h-16 rounded-full bg-white border border-emerald-100 text-emerald-700 flex items-center justify-center hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-90 shadow-sm"
             >
               <SkipBack className="w-6 h-6" />
             </button>
 
             <button 
               onClick={handleRepeat}
-              className={`w-24 h-24 rounded-[2.5rem] flex items-center justify-center transition-all duration-300 shadow-2xl active:scale-90 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/50 scale-110' : 'bg-white text-slate-900 hover:scale-105'}`}
+              className={`w-24 h-24 rounded-[2.5rem] flex items-center justify-center transition-all duration-300 shadow-2xl active:scale-90 ${isPlaying ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-white text-emerald-900 border border-emerald-100 hover:bg-emerald-50'}`}
             >
               {isPlaying ? (
                 <div className="flex items-center space-x-1">
-                  <div className="w-1 h-6 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
-                  <div className="w-1 h-8 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
-                  <div className="w-1 h-6 bg-white rounded-full animate-bounce" />
+                  <div className="w-1.5 h-6 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-1.5 h-8 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-1.5 h-6 bg-white rounded-full animate-bounce" />
                 </div>
               ) : (
                 <RotateCcw className="w-10 h-10" />
@@ -236,7 +229,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
 
             <button 
               onClick={handleNext}
-              className="w-16 h-16 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-all active:scale-90"
+              className="w-16 h-16 rounded-full bg-white border border-emerald-100 text-emerald-700 flex items-center justify-center hover:bg-emerald-50 transition-all active:scale-90 shadow-sm"
             >
               <SkipForward className="w-6 h-6" />
             </button>
@@ -244,15 +237,15 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
 
           {/* Progress Bar */}
           <div className="relative">
-            <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+            <div className="h-2 w-full bg-emerald-100 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-700 ease-out shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700 ease-out"
                 style={{ width: `${progress}%` }}
               />
             </div>
             <div className="flex justify-between mt-3 px-1">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">学习进度</span>
-              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{Math.round(progress)}% 完成</span>
+              <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest opacity-50">进度条</span>
+              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{Math.round(progress)}%</span>
             </div>
           </div>
         </div>

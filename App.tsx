@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
@@ -78,24 +77,25 @@ const App: React.FC = () => {
   const currentStudyList = lists.find(l => l.id === currentStudyListId);
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-emerald-50/40">
-      {/* 装饰性背景：调整为淡绿色系 */}
+    <div className="min-h-screen relative overflow-hidden bg-green-50">
+      {/* 增强后的淡绿色装饰性背景 */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-200/50 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-teal-200/40 rounded-full blur-[100px]" />
+        <div className="absolute top-[-5%] left-[-10%] w-[50%] h-[50%] bg-emerald-200/40 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-teal-200/40 rounded-full blur-[100px]" />
+        <div className="absolute top-[30%] right-[10%] w-[20%] h-[20%] bg-green-200/30 rounded-full blur-[80px]" />
       </div>
 
-      <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-emerald-100/50 px-6 py-4 flex items-center justify-between">
+      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-green-100 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <div className="w-9 h-9 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
             <Mic className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600">LingoEcho</h1>
+          <h1 className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-emerald-900 to-teal-800">LingoEcho</h1>
         </div>
         
         <button 
           onClick={() => handleOpenModal()}
-          className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl shadow-emerald-200/50 flex items-center space-x-2"
+          className="bg-emerald-900 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl shadow-emerald-200/50 flex items-center space-x-2"
         >
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">新建词单</span>
@@ -106,22 +106,22 @@ const App: React.FC = () => {
         <header className="mb-16 text-center sm:text-left">
           <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold mb-4 ring-1 ring-emerald-200">
             <Sparkles className="w-3 h-3 mr-2" />
-            AI 驱动的高效背诵
+            AI 语音随机听写
           </div>
           <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4 tracking-tight">我的学习库</h2>
-          <p className="text-slate-500 font-medium text-lg max-w-2xl">构建你的专属词单，利用高品质 AI 语音进行随机听写练习。</p>
+          <p className="text-slate-500 font-medium text-lg max-w-2xl">构建你的专属词单，在清新的环境下高效记忆。</p>
         </header>
 
         {lists.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 bg-white/60 backdrop-blur-md rounded-[2.5rem] border border-white shadow-2xl shadow-emerald-100/50">
-            <div className="w-24 h-24 bg-gradient-to-b from-emerald-50 to-emerald-100 rounded-3xl flex items-center justify-center mb-8 ring-1 ring-emerald-200/50">
+          <div className="flex flex-col items-center justify-center py-24 bg-white/80 backdrop-blur-md rounded-[2.5rem] border border-green-100 shadow-xl shadow-emerald-100/50">
+            <div className="w-24 h-24 bg-gradient-to-b from-green-50 to-emerald-100 rounded-3xl flex items-center justify-center mb-8 ring-1 ring-emerald-200/50">
               <Library className="w-10 h-10 text-emerald-300" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-2">你的库空空如也</h3>
-            <p className="text-slate-500 mb-10 max-w-xs text-center font-medium">点击右上角的按钮，开始你的第一个词单学习之旅。</p>
+            <h3 className="text-2xl font-bold text-slate-800 mb-2">库中还没有单词</h3>
+            <p className="text-slate-500 mb-10 max-w-xs text-center font-medium">点击上方按钮，开始创建你的第一个绿色学习词单。</p>
             <button 
               onClick={() => handleOpenModal()}
-              className="px-8 py-4 bg-white border border-emerald-100 text-slate-900 rounded-2xl font-black hover:bg-emerald-50 transition-all shadow-sm flex items-center space-x-3"
+              className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-lg flex items-center space-x-3"
             >
               <Plus className="w-5 h-5" />
               <span>立即创建</span>
@@ -142,20 +142,20 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* 优化后的 Modal */}
+      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden relative animate-in zoom-in-95 duration-300 ring-1 ring-emerald-100">
-            <div className="px-10 py-8 border-b border-emerald-50 flex justify-between items-center">
+          <div className="absolute inset-0 bg-emerald-900/20 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden relative animate-in zoom-in-95 duration-300 border border-green-100">
+            <div className="px-10 py-8 border-b border-green-50 flex justify-between items-center">
               <h2 className="text-2xl font-black text-slate-900">{editingList ? '编辑词单' : '创建新词单'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-50 text-slate-400 transition-colors">
+              <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-green-50 text-slate-400 transition-colors">
                 <Plus className="w-6 h-6 rotate-45" />
               </button>
             </div>
             <form onSubmit={handleSaveList} className="p-10">
               <div className="mb-8">
-                <label className="block text-sm font-black text-slate-700 mb-3 ml-1 uppercase tracking-wider">词单名称</label>
+                <label className="block text-sm font-black text-emerald-800 mb-3 ml-1 uppercase tracking-wider">词单名称</label>
                 <input 
                   type="text" 
                   autoFocus
@@ -163,31 +163,31 @@ const App: React.FC = () => {
                   value={listName}
                   onChange={(e) => setListName(e.target.value)}
                   placeholder="例如：雅思核心词汇"
-                  className="w-full px-6 py-4 rounded-2xl bg-emerald-50/50 border-transparent focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-slate-800 placeholder:text-emerald-200"
+                  className="w-full px-6 py-4 rounded-2xl bg-green-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all font-bold text-slate-800"
                 />
               </div>
               <div className="mb-10">
-                <label className="block text-sm font-black text-slate-700 mb-3 ml-1 uppercase tracking-wider">单词列表</label>
+                <label className="block text-sm font-black text-emerald-800 mb-3 ml-1 uppercase tracking-wider">单词列表</label>
                 <textarea 
                   required
                   value={wordsInput}
                   onChange={(e) => setWordsInput(e.target.value)}
                   rows={6}
-                  placeholder="苹果, 香蕉, 樱桃 (支持逗号、空格或回车分隔)..."
-                  className="w-full px-6 py-4 rounded-2xl bg-emerald-50/50 border-transparent focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all resize-none font-medium text-slate-700 placeholder:text-emerald-200"
+                  placeholder="支持回车、逗号或空格分隔单词..."
+                  className="w-full px-6 py-4 rounded-2xl bg-green-50/50 border-2 border-transparent focus:bg-white focus:border-emerald-500 outline-none transition-all resize-none font-medium text-slate-700"
                 />
               </div>
               <div className="flex gap-4">
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-4 text-slate-500 font-bold hover:bg-emerald-50 rounded-2xl transition-all"
+                  className="flex-1 py-4 text-slate-500 font-bold hover:bg-green-50 rounded-2xl transition-all"
                 >
                   取消
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-xl shadow-emerald-100 transition-all hover:scale-[1.02] active:scale-95"
+                  className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-xl shadow-emerald-100 transition-all"
                 >
                   保存并开始
                 </button>
