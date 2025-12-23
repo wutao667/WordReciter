@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
 import { speakWord } from '../services/geminiService';
+import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X } from 'lucide-react';
 
 interface StudySessionProps {
   list: WordList;
@@ -13,36 +14,98 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWordVisible, setIsWordVisible] = useState(false);
+  
   const audioContextRef = useRef<AudioContext | null>(null);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const isComponentMounted = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Initialize and shuffle
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  // 停止当前所有语音播放及逻辑循环
+  const stopAllAudio = useCallback(() => {
+    if (currentSourceRef.current) {
+      try {
+        currentSourceRef.current.stop();
+      } catch (e) {}
+      currentSourceRef.current = null;
+    }
+    window.speechSynthesis.cancel();
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setIsPlaying(false);
+  }, []);
+
   useEffect(() => {
+    isComponentMounted.current = true;
     const words = [...list.words].sort(() => Math.random() - 0.5);
     setShuffledWords(words);
     audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     
     return () => {
+      isComponentMounted.current = false;
+      stopAllAudio();
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
     };
-  }, [list.words]);
+  }, [list.words, stopAllAudio]);
 
-  const playCurrentWord = useCallback(async () => {
-    if (!shuffledWords[currentIndex] || isPlaying || !audioContextRef.current) return;
+  const playCurrentWordOnce = useCallback(async () => {
+    if (!shuffledWords[currentIndex] || !audioContextRef.current) return;
+    
+    if (currentSourceRef.current) {
+      try { currentSourceRef.current.stop(); } catch(e) {}
+      currentSourceRef.current = null;
+    }
+    window.speechSynthesis.cancel();
 
+    try {
+      await speakWord(
+        shuffledWords[currentIndex], 
+        audioContextRef.current, 
+        (source) => {
+          currentSourceRef.current = source;
+        }
+      );
+    } catch (error) {
+      console.error("Single play error:", error);
+    }
+  }, [shuffledWords, currentIndex]);
+
+  const startSequence = useCallback(async () => {
+    if (!shuffledWords[currentIndex]) return;
+
+    stopAllAudio();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    
     setIsPlaying(true);
-    await speakWord(shuffledWords[currentIndex], audioContextRef.current);
-    setIsPlaying(false);
-  }, [shuffledWords, currentIndex, isPlaying]);
+    try {
+      for (let i = 0; i < 3; i++) {
+        if (controller.signal.aborted || !isComponentMounted.current) break;
+        
+        await playCurrentWordOnce();
+        
+        if (i < 2 && !controller.signal.aborted && isComponentMounted.current) {
+          await delay(1000); 
+        }
+      }
+    } catch (e) {
+      console.error("Sequence error:", e);
+    } finally {
+      if (!controller.signal.aborted && isComponentMounted.current) {
+        setIsPlaying(false);
+      }
+    }
+  }, [shuffledWords, currentIndex, stopAllAudio, playCurrentWordOnce]);
 
-  // Auto-play when index changes
   useEffect(() => {
     if (shuffledWords.length > 0) {
-      playCurrentWord();
+      startSequence();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, shuffledWords]);
+  }, [currentIndex, shuffledWords, startSequence]);
 
   const handleNext = () => {
     setIsWordVisible(false);
@@ -60,104 +123,138 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     }
   };
 
-  const handleRepeat = () => {
-    playCurrentWord();
+  const handleRepeat = async () => {
+    stopAllAudio();
+    setIsPlaying(true);
+    await playCurrentWordOnce();
+    setIsPlaying(false);
   };
-
-  const showWord = () => setIsWordVisible(true);
-  const hideWord = () => setIsWordVisible(false);
 
   if (shuffledWords.length === 0) return null;
 
-  return (
-    <div className="fixed inset-0 bg-indigo-50 flex flex-col items-center justify-center p-6 z-50 animate-in fade-in zoom-in duration-300">
-      <button 
-        onClick={onFinish}
-        className="absolute top-6 left-6 text-slate-400 hover:text-slate-600 flex items-center space-x-1"
-      >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-        </svg>
-        <span>Exit</span>
-      </button>
+  const progress = ((currentIndex + 1) / shuffledWords.length) * 100;
 
-      <div className="text-center w-full max-w-lg">
-        <div className="mb-4">
-          <span className="text-sm font-semibold text-indigo-500 uppercase tracking-widest">
-            {list.name}
-          </span>
-          <div className="mt-2 text-slate-400 font-medium">
-            {currentIndex + 1} / {shuffledWords.length}
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center p-6 sm:p-12 overflow-hidden bg-slate-900">
+      {/* 动态背景 */}
+      <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
+        <div 
+          className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-500 rounded-full blur-[150px] transition-all duration-1000" 
+          style={{ transform: `translate(${progress / 2}%, ${progress / 5}%)` }}
+        />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-violet-600 rounded-full blur-[120px]" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-2xl flex flex-col h-full justify-between">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <button 
+            onClick={onFinish}
+            className="group flex items-center space-x-2 text-slate-400 hover:text-white transition-colors"
+          >
+            <div className="w-10 h-10 rounded-full border border-slate-700 flex items-center justify-center group-hover:border-slate-500 transition-all">
+              <X className="w-5 h-5" />
+            </div>
+            <span className="font-bold text-sm tracking-wide uppercase">退出练习</span>
+          </button>
+          
+          <div className="text-right">
+            <div className="text-slate-500 text-xs font-black uppercase tracking-widest mb-1">{list.name}</div>
+            <div className="text-white font-mono text-lg font-bold">
+              <span className="text-indigo-400">{currentIndex + 1}</span>
+              <span className="text-slate-600 mx-1">/</span>
+              <span className="text-slate-400">{shuffledWords.length}</span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-xl p-12 mb-8 transform transition-all flex flex-col items-center justify-center min-h-[250px]">
-          <h1 className="text-5xl md:text-7xl font-bold text-slate-800 break-words mb-8 select-none">
-            {isWordVisible ? shuffledWords[currentIndex] : '***'}
-          </h1>
-          
-          <button
-            onMouseDown={showWord}
-            onMouseUp={hideWord}
-            onMouseLeave={hideWord}
-            onTouchStart={showWord}
-            onTouchEnd={hideWord}
-            className="flex items-center space-x-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-bold transition-all active:scale-95 select-none touch-none"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            <span>Show Word</span>
-          </button>
-        </div>
-
-        <div className="flex items-center justify-center space-x-6">
-          <button 
-            onClick={handlePrevious}
-            disabled={currentIndex === 0 || isPlaying}
-            className="p-4 bg-white text-slate-600 rounded-full shadow-md hover:shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            title="Previous"
-          >
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
-            </svg>
-          </button>
-
-          <button 
-            onClick={handleRepeat}
-            disabled={isPlaying}
-            className="p-6 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 disabled:opacity-50 transition-all transform hover:scale-110 active:scale-95"
-            title="Repeat"
-          >
-            {isPlaying ? (
-              <svg className="w-10 h-10 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-              </svg>
-            ) : (
-              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            )}
-          </button>
-
-          <button 
-            onClick={handleNext}
-            disabled={isPlaying}
-            className="p-4 bg-white text-slate-600 rounded-full shadow-md hover:shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            title="Next"
-          >
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 005 8v8a1 1 0 001.6.8l5.334-4zM19.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.334-4z" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="mt-12 w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+        {/* Word Display Area: 使用显式的条件渲染 */}
+        <div className="flex-1 flex flex-col items-center justify-center py-12">
           <div 
-            className="bg-indigo-500 h-full transition-all duration-500 ease-out"
-            style={{ width: `${((currentIndex + 1) / shuffledWords.length) * 100}%` }}
-          />
+            className={`w-full aspect-[4/3] sm:aspect-video rounded-[3rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-2xl transition-all duration-500 ${isPlaying ? 'scale-[1.02] border-white/20' : ''}`}
+          >
+            <div className={`absolute inset-0 bg-indigo-500/5 rounded-[3rem] transition-opacity duration-1000 ${isPlaying ? 'opacity-100' : 'opacity-0'}`} />
+
+            <div className="relative text-center w-full min-h-[8rem] flex flex-col items-center justify-center">
+              {isWordVisible ? (
+                /* 点击时：显示实际单词 */
+                <h1 className="text-6xl sm:text-8xl font-black tracking-tighter text-white animate-in fade-in zoom-in duration-300">
+                  {shuffledWords[currentIndex]}
+                </h1>
+              ) : (
+                /* 默认：显示 *** 和状态信息 */
+                <div className="flex flex-col items-center justify-center animate-in fade-in duration-300">
+                  <div className="text-indigo-500/30 text-6xl sm:text-8xl font-black tracking-[0.2em] animate-pulse">
+                    ***
+                  </div>
+                  <div className="mt-4 text-indigo-400/50 text-sm font-bold tracking-widest uppercase">
+                    {isPlaying ? '正在播报中...' : '播报已暂停'}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onMouseDown={() => setIsWordVisible(true)}
+              onMouseUp={() => setIsWordVisible(false)}
+              onMouseLeave={() => setIsWordVisible(false)}
+              onTouchStart={() => setIsWordVisible(true)}
+              onTouchEnd={() => setIsWordVisible(false)}
+              className={`mt-12 px-8 py-4 rounded-2xl flex items-center space-x-3 transition-all duration-300 font-black text-sm uppercase tracking-wider ${isWordVisible ? 'bg-white text-slate-900 shadow-xl' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+            >
+              {isWordVisible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              <span>按住显示单词</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="pb-12">
+          <div className="flex items-center justify-center space-x-6 mb-12">
+            <button 
+              onClick={handlePrevious}
+              disabled={currentIndex === 0}
+              className="w-16 h-16 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-90"
+            >
+              <SkipBack className="w-6 h-6" />
+            </button>
+
+            <button 
+              onClick={handleRepeat}
+              className={`w-24 h-24 rounded-[2.5rem] flex items-center justify-center transition-all duration-300 shadow-2xl active:scale-90 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/50 scale-110' : 'bg-white text-slate-900 hover:scale-105'}`}
+            >
+              {isPlaying ? (
+                <div className="flex items-center space-x-1">
+                  <div className="w-1 h-6 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-1 h-8 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-1 h-6 bg-white rounded-full animate-bounce" />
+                </div>
+              ) : (
+                <RotateCcw className="w-10 h-10" />
+              )}
+            </button>
+
+            <button 
+              onClick={handleNext}
+              className="w-16 h-16 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-all active:scale-90"
+            >
+              <SkipForward className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="relative">
+            <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-700 ease-out shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="flex justify-between mt-3 px-1">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">学习进度</span>
+              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{Math.round(progress)}% 完成</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -3,40 +3,16 @@ import React, { useState, useEffect } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import { Plus, Mic, Key, AlertTriangle } from 'lucide-react';
-
-// Define AIStudio interface for global window augmentation
-interface AIStudio {
-  hasSelectedApiKey: () => Promise<boolean>;
-  openSelectKey: () => Promise<void>;
-}
-
-declare global {
-  interface Window {
-    // Making aistudio optional to fix "identical modifiers" error and reflect its potential absence
-    aistudio?: AIStudio;
-  }
-}
+import { Plus, Mic, Library, Sparkles } from 'lucide-react';
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingList, setEditingList] = useState<WordList | null>(null);
   const [currentStudyListId, setCurrentStudyListId] = useState<string | null>(null);
-  const [hasKey, setHasKey] = useState<boolean>(true);
   
   const [listName, setListName] = useState('');
   const [wordsInput, setWordsInput] = useState('');
-
-  useEffect(() => {
-    const checkKey = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasKey(selected);
-      }
-    };
-    checkKey();
-  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('lingo-echo-lists');
@@ -90,7 +66,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteList = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this list?')) {
+    if (window.confirm('确定要删除这个词单吗？')) {
       setLists(prev => prev.filter(l => l.id !== id));
     }
   };
@@ -99,98 +75,60 @@ const App: React.FC = () => {
     setCurrentStudyListId(id);
   };
 
-  const handleConfigKey = async () => {
-    if (window.aistudio?.openSelectKey) {
-      await window.aistudio.openSelectKey();
-      // Assume successful after triggering to avoid race conditions
-      setHasKey(true);
-    }
-  };
-
   const currentStudyList = lists.find(l => l.id === currentStudyListId);
 
   return (
-    <div className="min-h-screen pb-20">
-      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-            <Mic className="w-6 h-6 text-white" />
+    <div className="min-h-screen relative overflow-hidden bg-emerald-50/40">
+      {/* 装饰性背景：调整为淡绿色系 */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-200/50 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-teal-200/40 rounded-full blur-[100px]" />
+      </div>
+
+      <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-emerald-100/50 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <div className="w-9 h-9 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
+            <Mic className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-2xl font-black tracking-tighter text-slate-900">LingoEcho</h1>
+          <h1 className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600">LingoEcho</h1>
         </div>
         
-        <div className="flex items-center space-x-3">
-          <button 
-            onClick={handleConfigKey}
-            className={`p-2.5 rounded-xl transition-all border ${
-              hasKey 
-                ? 'text-slate-500 border-slate-200 hover:bg-slate-50' 
-                : 'text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 animate-pulse'
-            }`}
-            title="Configure Gemini API Key"
-          >
-            <Key className="w-5 h-5" />
-          </button>
-          
-          <button 
-            onClick={() => handleOpenModal()}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-md hover:shadow-lg flex items-center space-x-2"
-          >
-            <Plus className="w-5 h-5" />
-            <span className="hidden sm:inline">New List</span>
-          </button>
-        </div>
+        <button 
+          onClick={() => handleOpenModal()}
+          className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl shadow-emerald-200/50 flex items-center space-x-2"
+        >
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">新建词单</span>
+        </button>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-6 py-10">
-        {!hasKey && (
-          <div className="mb-8 p-6 bg-amber-50 border border-amber-200 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-start space-x-3 text-amber-800">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <div className="flex flex-col">
-                <span className="text-sm font-bold">Gemini API key is missing.</span>
-                <p className="text-sm">High-quality AI voices require a selected API key. The app will fallback to local browser TTS otherwise.</p>
-                {/* Billing documentation link provided in the UI as per instructions */}
-                <a 
-                  href="https://ai.google.dev/gemini-api/docs/billing" 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="text-xs text-amber-600 underline hover:no-underline mt-2 font-bold"
-                >
-                  Learn more about billing and API keys
-                </a>
-              </div>
-            </div>
-            <button 
-              onClick={handleConfigKey} 
-              className="whitespace-nowrap bg-amber-600 text-white px-6 py-2.5 rounded-xl text-sm font-black shadow-md hover:bg-amber-700 transition-all"
-            >
-              Select API Key
-            </button>
+      <main className="max-w-6xl mx-auto px-6 py-12">
+        <header className="mb-16 text-center sm:text-left">
+          <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold mb-4 ring-1 ring-emerald-200">
+            <Sparkles className="w-3 h-3 mr-2" />
+            AI 驱动的高效背诵
           </div>
-        )}
-
-        <header className="mb-12">
-          <h2 className="text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Your Library</h2>
-          <p className="text-slate-500 font-medium">Build your custom word lists and practice listening with AI voices.</p>
+          <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4 tracking-tight">我的学习库</h2>
+          <p className="text-slate-500 font-medium text-lg max-w-2xl">构建你的专属词单，利用高品质 AI 语音进行随机听写练习。</p>
         </header>
 
         {lists.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border-2 border-dashed border-slate-200 shadow-sm">
-            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-              <Plus className="w-10 h-10 text-slate-300" />
+          <div className="flex flex-col items-center justify-center py-24 bg-white/60 backdrop-blur-md rounded-[2.5rem] border border-white shadow-2xl shadow-emerald-100/50">
+            <div className="w-24 h-24 bg-gradient-to-b from-emerald-50 to-emerald-100 rounded-3xl flex items-center justify-center mb-8 ring-1 ring-emerald-200/50">
+              <Library className="w-10 h-10 text-emerald-300" />
             </div>
-            <h3 className="text-xl font-bold text-slate-800 mb-2">Start your journey</h3>
-            <p className="text-slate-500 mb-8 max-w-xs text-center">Add words you want to memorize, then start the audio playback session.</p>
+            <h3 className="text-2xl font-bold text-slate-800 mb-2">你的库空空如也</h3>
+            <p className="text-slate-500 mb-10 max-w-xs text-center font-medium">点击右上角的按钮，开始你的第一个词单学习之旅。</p>
             <button 
               onClick={() => handleOpenModal()}
-              className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl"
+              className="px-8 py-4 bg-white border border-emerald-100 text-slate-900 rounded-2xl font-black hover:bg-emerald-50 transition-all shadow-sm flex items-center space-x-3"
             >
-              Create First List
+              <Plus className="w-5 h-5" />
+              <span>立即创建</span>
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {lists.map(list => (
               <WordListCard 
                 key={list.id} 
@@ -204,53 +142,54 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modal */}
+      {/* 优化后的 Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-2xl font-extrabold text-slate-900">{editingList ? 'Edit List' : 'Create New List'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden relative animate-in zoom-in-95 duration-300 ring-1 ring-emerald-100">
+            <div className="px-10 py-8 border-b border-emerald-50 flex justify-between items-center">
+              <h2 className="text-2xl font-black text-slate-900">{editingList ? '编辑词单' : '创建新词单'}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-50 text-slate-400 transition-colors">
                 <Plus className="w-6 h-6 rotate-45" />
               </button>
             </div>
-            <form onSubmit={handleSaveList} className="p-8">
-              <div className="mb-6">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Collection Name</label>
+            <form onSubmit={handleSaveList} className="p-10">
+              <div className="mb-8">
+                <label className="block text-sm font-black text-slate-700 mb-3 ml-1 uppercase tracking-wider">词单名称</label>
                 <input 
                   type="text" 
                   autoFocus
                   required
                   value={listName}
                   onChange={(e) => setListName(e.target.value)}
-                  placeholder="e.g., GRE High Frequency"
-                  className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-medium"
+                  placeholder="例如：雅思核心词汇"
+                  className="w-full px-6 py-4 rounded-2xl bg-emerald-50/50 border-transparent focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-slate-800 placeholder:text-emerald-200"
                 />
               </div>
-              <div className="mb-8">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Word Items</label>
+              <div className="mb-10">
+                <label className="block text-sm font-black text-slate-700 mb-3 ml-1 uppercase tracking-wider">单词列表</label>
                 <textarea 
                   required
                   value={wordsInput}
                   onChange={(e) => setWordsInput(e.target.value)}
                   rows={6}
-                  placeholder="apple, banana, cherry (or one per line)..."
-                  className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all resize-none font-mono"
+                  placeholder="苹果, 香蕉, 樱桃 (支持逗号、空格或回车分隔)..."
+                  className="w-full px-6 py-4 rounded-2xl bg-emerald-50/50 border-transparent focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all resize-none font-medium text-slate-700 placeholder:text-emerald-200"
                 />
               </div>
               <div className="flex gap-4">
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-4 text-slate-600 font-bold hover:bg-slate-50 rounded-2xl transition-all border border-slate-200"
+                  className="flex-1 py-4 text-slate-500 font-bold hover:bg-emerald-50 rounded-2xl transition-all"
                 >
-                  Cancel
+                  取消
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 transition-all"
+                  className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-xl shadow-emerald-100 transition-all hover:scale-[1.02] active:scale-95"
                 >
-                  Save Collection
+                  保存并开始
                 </button>
               </div>
             </form>

@@ -30,15 +30,23 @@ const decodeAudioData = async (
   return buffer;
 };
 
-export const speakWord = async (text: string, audioContext: AudioContext): Promise<void> => {
+// 增加可选的 onSourceCreated 回调，允许调用者控制播放中的 SourceNode
+export const speakWord = async (
+  text: string, 
+  audioContext: AudioContext, 
+  onSourceCreated?: (source: AudioBufferSourceNode) => void
+): Promise<void> => {
   try {
-    // Instantiate right before use to ensure the latest API key from session is used.
-    // Strictly following GoogleGenAI initialization guidelines.
+    // 确保上下文是运行状态
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `Say clearly: ${text}` }] }],
+      contents: [{ parts: [{ text: `Say clearly and naturally: ${text}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
@@ -49,9 +57,29 @@ export const speakWord = async (text: string, audioContext: AudioContext): Promi
       },
     });
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    let base64Audio: string | undefined;
+
+    // 遍历所有候选结果和部分以找到音频数据
+    if (response.candidates && response.candidates.length > 0) {
+      for (const candidate of response.candidates) {
+        if (candidate.content && candidate.content.parts) {
+          for (const part of candidate.content.parts) {
+            // 查找包含 inlineData 且 MIME 类型为音频的部分
+            if (part.inlineData && part.inlineData.data) {
+              base64Audio = part.inlineData.data;
+              break;
+            }
+          }
+        }
+        if (base64Audio) break;
+      }
+    }
+
+    // 如果未找到音频，尝试获取文本响应（可能包含安全过滤或错误信息）
     if (!base64Audio) {
-      throw new Error("No audio data returned");
+      const textReason = response.text;
+      console.warn("Gemini TTS did not return audio. Reason/Text:", textReason || "Unknown");
+      throw new Error("No audio data returned from Gemini TTS");
     }
 
     const audioBuffer = await decodeAudioData(
@@ -64,6 +92,12 @@ export const speakWord = async (text: string, audioContext: AudioContext): Promi
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
+    
+    // 将 source 传回给调用者以便中断
+    if (onSourceCreated) {
+      onSourceCreated(source);
+    }
+
     source.start();
     
     return new Promise((resolve) => {
@@ -71,18 +105,14 @@ export const speakWord = async (text: string, audioContext: AudioContext): Promi
     });
   } catch (error: any) {
     console.error("Gemini TTS Error:", error);
-    
-    // Check for "Requested entity was not found" error which might indicate key selection issues
-    // Prompt the user for key selection as per instructions
-    if (error?.message?.includes("Requested entity was not found") && window.aistudio?.openSelectKey) {
-      console.warn("API Key issue detected. Prompting for key selection.");
-      await window.aistudio.openSelectKey();
-    }
 
-    // Fallback to browser synthesis if AI fails
+    // 回退到浏览器合成前先取消当前所有语音
+    window.speechSynthesis.cancel();
+    
     return new Promise((resolve) => {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
       window.speechSynthesis.speak(utterance);
     });
   }
