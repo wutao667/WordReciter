@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
@@ -131,11 +132,19 @@ const App: React.FC = () => {
       </div>
 
       <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-green-100 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <div className="w-9 h-9 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200 flex-shrink-0">
             <Mic className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-emerald-900 to-teal-800">LingoEcho</h1>
+          <div className="flex flex-col">
+            <h1 className="text-xl font-black tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-emerald-900 to-teal-800">
+              LingoEcho
+            </h1>
+            <div className="flex items-center text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1 opacity-80">
+              <Sparkles className="w-2.5 h-2.5 mr-1" />
+              语音录入听写
+            </div>
+          </div>
         </div>
         
         <button 
@@ -149,10 +158,6 @@ const App: React.FC = () => {
 
       <main className="max-w-6xl mx-auto px-6 py-12">
         <header className="mb-16 text-center sm:text-left">
-          <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold mb-4 ring-1 ring-emerald-200">
-            <Sparkles className="w-3 h-3 mr-2" />
-            语音录入听写
-          </div>
           <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4 tracking-tight">我的学习库</h2>
           <p className="text-slate-500 font-medium text-lg max-w-2xl">构建你的专属词单，在清新的环境下高效记忆。</p>
         </header>
