@@ -32,7 +32,7 @@ export const speakWord = (
     };
 
     utterance.onerror = (event) => {
-      console.error("SpeechSynthesis Error:", event);
+      console.error("SpeechSynthesis Error:", event.error);
       resolve(); // 出错也 resolve，避免外部 Promise 挂起
     };
 
