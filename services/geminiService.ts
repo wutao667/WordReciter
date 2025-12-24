@@ -123,15 +123,13 @@ export const speakWithAiTTS = async (text: string): Promise<void> => {
 };
 
 /**
- * 播报系统预热（Unlock）：
- * 优化：使用完全静默且长度适中的标准 WAV，移除可能导致系统提示音的 TTS 预热。
+ * 播报系统预热（Unlock）
  */
 export const unlockAudioContext = () => {
   try {
     const silentAudio = new Audio();
-    // 一个标准的 100ms 采样率 8k 的单声道静默 WAV 文件
     silentAudio.src = "data:audio/wav;base64,UklGRjIAAABXQVZFMmZtdCAAAAABAAEAQB8AAEAfAAABAAgAAABkYXRhAAAAAAGHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg==";
-    silentAudio.volume = 0; // 即使是静默数据也将音量设为0
+    silentAudio.volume = 0;
     silentAudio.play().catch(() => {});
   } catch (e) {
     console.debug("Unlock failed", e);
@@ -149,10 +147,22 @@ export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
 
 /**
  * 统一调度
+ * @param text 要播报的文字
+ * @param forceEngine 强制指定的引擎
  */
-export const speakWord = async (text: string): Promise<'Web Speech' | 'AI-TTS'> => {
+export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-TTS'): Promise<'Web Speech' | 'AI-TTS'> => {
+  // 如果明确指定了引擎
+  if (forceEngine === 'AI-TTS') {
+    await speakWithAiTTS(text);
+    return 'AI-TTS';
+  }
+  if (forceEngine === 'Web Speech') {
+    await speakWordLocal(text);
+    return 'Web Speech';
+  }
+
+  // 否则走默认逻辑
   const preferred = getPreferredTTSEngine();
-  
   if (preferred === 'AI-TTS' && process.env.API_KEY) {
     await speakWithAiTTS(text);
     return 'AI-TTS';
