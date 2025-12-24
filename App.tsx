@@ -174,7 +174,7 @@ const App: React.FC = () => {
             return prev.trim() ? `${prev}\n${newContent}` : newContent;
           });
         } else {
-          setErrorMsg("未在图片中检测到单词");
+          setErrorMsg("未在图片中检测到单词，请检查 API 设置");
         }
         setIsAnalyzing(false);
       };
@@ -228,8 +228,24 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setIsDebugOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-500 p-3 rounded-2xl transition-all"><Bug className="w-4 h-4" /></button>
-            <button onClick={() => handleOpenModal()} className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-xl flex items-center gap-2 text-sm"><Plus className="w-4 h-4 stroke-[3px]" /><span>新建词单</span></button>
+            {!process.env.API_KEY && (
+              <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl border border-amber-100 animate-pulse">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase">需设置 API_KEY</span>
+              </div>
+            )}
+            <button 
+              onClick={() => setIsDebugOpen(true)} 
+              className="bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-500 p-3 rounded-2xl transition-all group relative"
+              title="系统诊断"
+            >
+              <Bug className="w-4 h-4" />
+              <span className="absolute -bottom-8 right-0 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">系统诊断面板</span>
+            </button>
+            <button onClick={() => handleOpenModal()} className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-xl flex items-center gap-2 text-sm">
+              <Plus className="w-4 h-4 stroke-[3px]" />
+              <span>新建词单</span>
+            </button>
           </div>
         </div>
       </nav>
