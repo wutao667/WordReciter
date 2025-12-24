@@ -85,7 +85,8 @@ export const speakWordLocal = (text: string, signal?: AbortSignal): Promise<void
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
-    utterance.rate = 0.8;
+    // 本地引擎也同步降低语速以保持一致性
+    utterance.rate = 0.6;
     utterance.onend = () => {
       signal?.removeEventListener('abort', onAbort);
       resolve();
@@ -123,8 +124,8 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
       body: JSON.stringify({
         model: "glm-tts",
         input: text,
-        voice: "female",
-        speed: 0.9,
+        voice: "female", // 标准音色，比 soft 系列更正式
+        speed: 0.6,      // 语速调至 0.6，确保听写清晰度
         volume: 1.0,
         response_format: "wav"
       })

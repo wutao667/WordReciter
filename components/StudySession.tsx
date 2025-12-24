@@ -51,7 +51,8 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     setIsPlaying(true);
     
     try {
-      const repeatedText = `${word}。 ${word}。 ${word}`;
+      // 使用分号和句号的组合，在 TTS 内部生成更自然的正式停顿感
+      const repeatedText = `${word}; ${word}; ${word}.`;
       await speakWord(repeatedText, activeEngine, controller.signal);
       
     } catch (err: any) {
@@ -73,7 +74,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const toggleEngine = () => {
     const nextEngine = activeEngine === 'Web Speech' ? 'AI-TTS' : 'Web Speech';
     setActiveEngine(nextEngine);
-    // useEffect 会监测 activeEngine 变化并自动调用 startSequence
   };
 
   useEffect(() => {
