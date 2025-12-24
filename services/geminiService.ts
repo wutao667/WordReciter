@@ -48,11 +48,9 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
  * 停止所有正在进行的播报（本地 + 云端）
  */
 export const stopAllSpeech = () => {
-  // 停止本地 TTS
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
-  // 停止云端 Audio
   if (currentAiAudio) {
     currentAiAudio.pause();
     currentAiAudio.src = "";
@@ -85,8 +83,7 @@ export const speakWordLocal = (text: string, signal?: AbortSignal): Promise<void
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
-    // 本地引擎也同步降低语速以保持一致性
-    utterance.rate = 0.6;
+    utterance.rate = 0.6; // 语速 0.6
     utterance.onend = () => {
       signal?.removeEventListener('abort', onAbort);
       resolve();
@@ -124,8 +121,8 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
       body: JSON.stringify({
         model: "glm-tts",
         input: text,
-        voice: "female", // 标准音色，比 soft 系列更正式
-        speed: 0.6,      // 语速调至 0.6，确保听写清晰度
+        voice: "female",
+        speed: 0.6, // 语速 0.6
         volume: 1.0,
         response_format: "wav"
       })
@@ -168,7 +165,7 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
           URL.revokeObjectURL(url);
           if (currentAiAudio === audio) currentAiAudio = null;
           if (err.name === 'AbortError') reject(err);
-          else reject(new Error("被浏览器拦截，请点击界面重试"));
+          else reject(new Error("播放被拦截"));
         });
       }
 
@@ -187,6 +184,9 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
   }
 };
 
+/**
+ * 智能选择引擎
+ */
 export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
   if (isWechat) return 'AI-TTS';
   const hasLocal = !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
@@ -194,32 +194,24 @@ export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
 };
 
 /**
- * 统一调度
+ * 统一调度：优先本地，自动回退到 AI
  */
-export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-TTS', signal?: AbortSignal): Promise<'Web Speech' | 'AI-TTS'> => {
-  if (forceEngine === 'AI-TTS') {
-    await speakWithAiTTS(text, signal);
-    return 'AI-TTS';
-  }
-  if (forceEngine === 'Web Speech') {
-    await speakWordLocal(text, signal);
-    return 'Web Speech';
-  }
-
+export const speakWord = async (text: string, signal?: AbortSignal): Promise<void> => {
   const preferred = getPreferredTTSEngine();
+  
+  // 如果首选是 AI（如微信环境），直接走 AI
   if (preferred === 'AI-TTS' && process.env.API_KEY) {
-    await speakWithAiTTS(text, signal);
-    return 'AI-TTS';
+    return await speakWithAiTTS(text, signal);
   }
 
+  // 否则尝试本地，失败则尝试 AI
   try {
     await speakWordLocal(text, signal);
-    return 'Web Speech';
   } catch (error: any) {
     if (error.message === 'AbortError') throw error;
+    // 本地失败且有 API Key，回退到 AI
     if (process.env.API_KEY) {
-      await speakWithAiTTS(text, signal);
-      return 'AI-TTS';
+      return await speakWithAiTTS(text, signal);
     }
     throw error;
   }
