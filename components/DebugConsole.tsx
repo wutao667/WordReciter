@@ -24,7 +24,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
   const runApiTest = async () => {
     setIsTestingApi(true);
-    addLog('info', '开始 Gemini API 连通性测试...');
+    addLog('info', '开始 GLM API 连通性测试...');
     const result = await testGeminiConnectivity();
     setApiStatus(result);
     if (result.success) {
@@ -69,8 +69,8 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
             <div>
               <h2 className="font-black text-slate-900 text-lg">系统诊断中心</h2>
               <div className="flex gap-2 mt-1">
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-600 text-[10px] font-black rounded-md uppercase">Stable v1.1.0</span>
-                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 text-[10px] font-black rounded-md uppercase">AI Mode Active</span>
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-600 text-[10px] font-black rounded-md uppercase">GLM Mode</span>
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 text-[10px] font-black rounded-md uppercase">AI Active</span>
               </div>
             </div>
           </div>
@@ -79,7 +79,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
         {/* Tab Switcher */}
         <div className="flex px-8 border-b bg-white">
-          <button onClick={() => setActiveTab('api')} className={`px-6 py-4 text-xs font-black transition-all border-b-2 ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>API & AI 实验室</button>
+          <button onClick={() => setActiveTab('api')} className={`px-6 py-4 text-xs font-black transition-all border-b-2 ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>GLM API 实验室</button>
           <button onClick={() => setActiveTab('hardware')} className={`px-6 py-4 text-xs font-black transition-all border-b-2 ${activeTab === 'hardware' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>硬件驱动检测</button>
         </div>
 
@@ -91,8 +91,8 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                 {/* API Status Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
-                    <h3 className="flex items-center gap-2 text-sm font-black text-slate-800"><Globe className="w-4 h-4 text-indigo-500" /> API 连通性测试</h3>
-                    <p className="text-xs text-slate-500">验证 API Key 对 gemini-3-flash-preview 的访问权限。</p>
+                    <h3 className="flex items-center gap-2 text-sm font-black text-slate-800"><Globe className="w-4 h-4 text-indigo-500" /> GLM 连通性测试</h3>
+                    <p className="text-xs text-slate-500">验证 API Key 对 GLM-4.6v-flash 的访问权限。</p>
                     <button 
                       onClick={runApiTest} 
                       disabled={isTestingApi}
@@ -115,13 +115,13 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
                     <h3 className="flex items-center gap-2 text-sm font-black text-slate-800"><Search className="w-4 h-4 text-purple-500" /> OCR 逻辑实验室</h3>
-                    <p className="text-xs text-slate-500">测试图片单词提取逻辑，验证是否成功剔除了非单词文本。</p>
+                    <p className="text-xs text-slate-500">使用 GLM 的 Vision 能力测试图片提取，验证过滤逻辑。</p>
                     <label className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 cursor-pointer">
                       {isOcrLabLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
                       上传图片测试提取
                       <input type="file" accept="image/*" className="hidden" onChange={handleLabUpload} disabled={isOcrLabLoading} />
                     </label>
-                    <p className="text-[10px] text-slate-400 italic">上传一张包含标题或页码的图，查看 AI 是否“多嘴”。</p>
+                    <p className="text-[10px] text-slate-400 italic">观察 GLM 的原生响应与清洗后的对比。</p>
                   </div>
                 </div>
 
@@ -129,13 +129,13 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                 {ocrLabResult && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in zoom-in-95 duration-300">
                     <div className="flex flex-col gap-3">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Raw Response (原始数据)</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Raw GLM Response</span>
                       <div className="p-4 bg-slate-900 text-slate-300 font-mono text-[10px] rounded-2xl h-48 overflow-y-auto leading-relaxed border border-slate-800">
                         {ocrLabResult.raw}
                       </div>
                     </div>
                     <div className="flex flex-col gap-3">
-                      <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-2">Cleaned Words (清洗后)</span>
+                      <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-2">Final Cleaned List</span>
                       <div className="p-4 bg-white border border-indigo-100 rounded-2xl h-48 overflow-y-auto flex flex-wrap gap-2 items-start content-start">
                         {ocrLabResult.cleaned.map((w, i) => (
                           <span key={i} className="px-2 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-lg border border-indigo-100">{w}</span>
@@ -147,7 +147,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                 )}
               </>
             ) : (
-              <div className="flex items-center justify-center h-full text-slate-300 italic text-sm">硬件诊断模块已就绪，请按需操作。</div>
+              <div className="flex items-center justify-center h-full text-slate-300 italic text-sm">硬件诊断模块已就绪。</div>
             )}
           </div>
 

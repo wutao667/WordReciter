@@ -166,7 +166,6 @@ const App: React.FC = () => {
         const base64 = (reader.result as string).split(',')[1];
         const extractedResult = await extractWordsFromImage(base64);
         
-        // Handle the union return type from extractWordsFromImage
         const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
 
         if (words.length > 0) {
@@ -276,7 +275,7 @@ const App: React.FC = () => {
                   {isAnalyzing && (
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center gap-3 animate-in fade-in duration-300">
                       <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Gemini 正在解析图像...</span>
+                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest">GLM 正在解析图像...</span>
                     </div>
                   )}
 

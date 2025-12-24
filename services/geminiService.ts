@@ -1,23 +1,37 @@
 
-import { GoogleGenAI } from "@google/genai";
+/**
+ * GLM API 服务模块
+ * 切换至智谱 AI GLM-4.6v-flash 模型
+ */
+
+const GLM_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+const MODEL_NAME = 'glm-4.6v-flash';
 
 /**
  * 验证 API 连通性
  */
 export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
   const start = Date.now();
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: "ping",
-      config: { maxOutputTokens: 5 }
+    const response = await fetch(GLM_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 10
+      })
     });
+
     const latency = Date.now() - start;
-    if (response.text) {
-      return { success: true, message: "API 连接成功，模型响应正常", latency };
+    if (response.ok) {
+      return { success: true, message: "GLM API 连接成功，模型响应正常", latency };
     }
-    throw new Error("模型返回空响应");
+    const errorData = await response.json();
+    throw new Error(errorData.error?.message || `HTTP 错误 ${response.status}`);
   } catch (error: any) {
     return { success: false, message: error.message || "未知错误", latency: Date.now() - start };
   }
@@ -33,7 +47,7 @@ export const cleanOcrOutput = (rawText: string): string[] => {
       if (!w) return false;
       // 过滤纯数字
       if (/^\d+$/.test(w)) return false;
-      // 过滤页码类文字 (如 121, Page 1)
+      // 过滤页码类文字
       if (/^p\d+$/i.test(w) || /^page\s*\d+$/i.test(w)) return false;
       
       const noiseKeywords = [
@@ -42,61 +56,76 @@ export const cleanOcrOutput = (rawText: string): string[] => {
         '**', '...', '---', ':', 'list'
       ];
       const lowercaseW = w.toLowerCase();
-      // 只要包含任何干扰词或仅由符号组成，则过滤
       const isNoise = noiseKeywords.some(key => lowercaseW.includes(key));
       const isJustSymbols = /^[^a-zA-Z\u4e00-\u9fa5]+$/.test(w);
       
       return !isNoise && !isJustSymbols;
     })
-    .map(w => w.replace(/[\*\-_]/g, '').trim()); // 移除 Markdown 装饰符
+    .map(w => w.replace(/[\*\-_]/g, '').trim());
 };
 
 /**
- * 使用 Gemini 3 Flash 视觉能力提取图片中的单词。
+ * 使用 GLM-4.6v-flash 视觉能力提取图片中的单词。
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [
-        {
-          parts: [
-            {
-              inlineData: {
-                mimeType: 'image/jpeg',
-                data: base64Data,
+    const response = await fetch(GLM_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64Data}`
+                }
               },
-            },
-            {
-              text: `URGENT: OCR EXTRACTION TASK.
-              Extract only the literal words and phrases. 
-              
-              FORBIDDEN ELEMENTS:
-              - NO "Based on the image..." or any introductory sentences.
-              - NO "Section X" or "Group Y" headers.
-              - NO numbers (e.g. 2, 3, 6, 121).
-              - NO titles like "词语表".
-              - NO punctuation or formatting symbols.
-              
-              OUTPUT FORMAT:
-              Just the words, one per line. Pure text only.`,
-            },
-          ],
-        },
-      ],
+              {
+                type: "text",
+                text: `URGENT: OCR EXTRACTION TASK.
+                Extract only the literal words and phrases from this image. 
+                
+                FORBIDDEN ELEMENTS:
+                - NO introductory or concluding sentences.
+                - NO "Section X" or "Group Y" headers.
+                - NO standalone numbers or page counts.
+                - NO punctuation or formatting symbols.
+                
+                OUTPUT FORMAT:
+                Just the words, one per line. Pure text only.`
+              }
+            ]
+          }
+        ],
+        thinking: {
+          type: "enabled"
+        }
+      })
     });
 
-    const rawText = response.text || "";
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || "网络请求失败");
+    }
+
+    const data = await response.json();
+    const rawText = data.choices[0]?.message?.content || "";
     const cleaned = cleanOcrOutput(rawText);
 
     if (returnRaw) {
       return { raw: rawText, cleaned };
     }
     return cleaned;
-  } catch (error) {
-    console.error("Gemini Vision Error:", error);
-    throw new Error("图像解析失败，请确保 API Key 有效且网络通畅");
+  } catch (error: any) {
+    console.error("GLM Vision Error:", error);
+    throw new Error(error.message || "图像解析失败，请检查 API 配置");
   }
 };
 
