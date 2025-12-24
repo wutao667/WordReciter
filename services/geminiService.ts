@@ -1,9 +1,9 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 
 /**
  * LingoEcho 服务模块
- * 已深度适配微信/移动端：集成智谱 GLM-TTS 解决本地语音驱动缺失问题
+ * 已深度适配微信/移动端：支持本地、智谱 AI、Gemini AI 三种语音驱动自动回退
  */
 
 const getApiKey = () => {
@@ -28,45 +28,109 @@ const getAudioContext = () => {
 };
 
 /**
- * 智谱 AI 云端语音合成 (GLM-TTS)
- * 解决移动端/微信本地 TTS 缺失的终极方案
+ * 基础 Base64 解码工具
+ */
+function decodeBase64(base64: string) {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * 解码 PCM 16bit 数据 (用于 Gemini TTS)
+ */
+async function decodePcmData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
+
+/**
+ * 方案 1: 智谱 AI 云端语音合成 (GLM-TTS)
  */
 export async function speakWithZhipuTTS(text: string): Promise<void> {
   const currentKey = getApiKey();
   if (!currentKey) throw new Error("API Key Missing");
 
+  const response = await fetch("https://open.bigmodel.cn/api/paas/v4/audio/speech", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${currentKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "glm-tts",
+      input: text,
+      voice: "female",
+      speed: 1.0,
+      volume: 1.0,
+      response_format: "wav"
+    })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `智谱错误: ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const ctx = getAudioContext();
+  if (ctx.state === 'suspended') await ctx.resume();
+
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+  const source = ctx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(ctx.destination);
+  
+  return new Promise((resolve) => {
+    source.onended = () => resolve();
+    source.start();
+  });
+}
+
+/**
+ * 方案 2: Gemini 2.5 原生云端语音合成
+ * 此方案与当前的 process.env.API_KEY 完美兼容
+ */
+export async function speakWithGeminiTTS(text: string): Promise<void> {
   try {
-    const response = await fetch("https://open.bigmodel.cn/api/paas/v4/audio/speech", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${currentKey}`,
-        "Content-Type": "application/json"
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: text }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
+          },
+        },
       },
-      body: JSON.stringify({
-        model: "glm-tts",
-        input: text,
-        voice: "female",
-        speed: 1.0,
-        volume: 1.0,
-        response_format: "wav"
-      })
     });
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error?.message || `智谱 API 异常: ${response.status}`);
-    }
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error("Gemini TTS 空响应");
 
-    // 获取 WAV 二进制流
-    const arrayBuffer = await response.arrayBuffer();
     const ctx = getAudioContext();
-    
-    // 微信环境下必须由用户手势解锁后 resume
     if (ctx.state === 'suspended') await ctx.resume();
 
-    // 使用标准 decodeAudioData 解析 WAV 格式
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-
+    const audioBuffer = await decodePcmData(decodeBase64(base64Audio), ctx, 24000, 1);
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(ctx.destination);
@@ -76,17 +140,17 @@ export async function speakWithZhipuTTS(text: string): Promise<void> {
       source.start();
     });
   } catch (error) {
-    console.error("Zhipu TTS Failed:", error);
+    console.error("Gemini TTS Failed:", error);
     throw error;
   }
 }
 
 /**
- * 显式的本地浏览器语音合成测试
+ * 方案 3: 本地浏览器语音驱动
  */
 export const speakWordLocal = async (text: string): Promise<void> => {
   if (typeof window === 'undefined' || !window.speechSynthesis) {
-    throw new Error("SpeechSynthesis not supported in this browser");
+    throw new Error("浏览器不支持本地语音");
   }
 
   return new Promise((resolve, reject) => {
@@ -94,78 +158,54 @@ export const speakWordLocal = async (text: string): Promise<void> => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
     utterance.rate = 0.9;
-    
     utterance.onend = () => resolve();
-    utterance.onerror = (e) => reject(new Error(`Local TTS Error: ${e.error}`));
-
+    utterance.onerror = (e) => reject(new Error(`本地错误: ${e.error}`));
     window.speechSynthesis.speak(utterance);
-    // 某些浏览器需要周期性 resume
     if (window.speechSynthesis.paused) window.speechSynthesis.resume();
   });
 };
 
 /**
- * 统一语音入口：智能切换本地/云端驱动
+ * 统一调度中心：三级回退逻辑
  */
 export const speakWord = async (text: string): Promise<void> => {
-  // 1. 尝试使用本地浏览器驱动 (如果可用)
-  const supportsLocal = typeof window !== 'undefined' && 
-                        window.speechSynthesis && 
-                        window.speechSynthesis.getVoices().length > 0;
+  // 1. 尝试本地
+  try {
+    const supportsLocal = window.speechSynthesis && window.speechSynthesis.getVoices().length > 0;
+    if (supportsLocal) {
+      await speakWordLocal(text);
+      return;
+    }
+  } catch (e) {
+    console.warn("Local TTS skipped");
+  }
 
-  if (supportsLocal) {
-    return new Promise((resolve) => {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
-      utterance.rate = 0.9;
-      
-      const safetyTimeout = setTimeout(() => {
-        console.warn("Local TTS Timeout -> Switching to Zhipu AI");
-        speakWithZhipuTTS(text).then(resolve).catch(resolve);
-      }, 2000); // 2秒未播放则强制切换云端
-
-      utterance.onend = () => {
-        clearTimeout(safetyTimeout);
-        resolve();
-      };
-
-      utterance.onerror = () => {
-        clearTimeout(safetyTimeout);
-        speakWithZhipuTTS(text).then(resolve).catch(resolve);
-      };
-
-      window.speechSynthesis.speak(utterance);
-      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-    });
-  } else {
-    // 2. 本地驱动缺失 (微信环境)，直接调用智谱 AI
-    return speakWithZhipuTTS(text);
+  // 2. 尝试智谱 (用户首选)
+  try {
+    await speakWithZhipuTTS(text);
+    return;
+  } catch (e: any) {
+    console.error("Zhipu AI Failed, trying Gemini Fallback...", e.message);
+    // 3. 最终保底：Gemini TTS (必成方案)
+    await speakWithGeminiTTS(text);
   }
 };
 
 /**
- * 音频解锁：同时激活本地和 AudioContext 权限
+ * 音频解锁
  */
 export const unlockAudio = (): void => {
   if (typeof window !== 'undefined') {
-    // 激活 Web Speech 队列
     if (window.speechSynthesis) {
       const silent = new SpeechSynthesisUtterance(" ");
       silent.volume = 0;
       window.speechSynthesis.speak(silent);
     }
-    // 激活 AudioContext (对云端语音至关重要)
     const ctx = getAudioContext();
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(console.error);
-    }
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   }
 };
 
-/**
- * 基础 API 功能保留
- */
 export const testGeminiConnectivity = async () => {
   const start = Date.now();
   try {
@@ -186,12 +226,11 @@ export const extractWordsFromImage = async (base64Data: string) => {
       contents: {
         parts: [
           { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
-          { text: "Extract English/Chinese words, one per line." }
+          { text: "Extract words, one per line." }
         ]
       }
     });
-    const text = response.text || "";
-    return text.split('\n').map(w => w.trim()).filter(w => w && !/^\d+$/.test(w));
+    return (response.text || "").split('\n').map(w => w.trim()).filter(w => w && !/^\d+$/.test(w));
   } catch (error: any) {
     throw new Error(error.message || "图像解析失败");
   }
