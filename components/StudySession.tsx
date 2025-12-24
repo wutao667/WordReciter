@@ -101,6 +101,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
       </div>
 
       <div className="relative z-10 w-full max-w-3xl flex flex-col h-full justify-between py-10">
+        {/* Top Header */}
         <div className="flex justify-between items-center bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 shadow-2xl">
           <button onClick={onFinish} className="flex items-center space-x-3 text-slate-400 hover:text-white transition-all group">
             <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-red-500/20 group-hover:text-red-400 transition-all">
@@ -117,27 +118,10 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
           </div>
         </div>
 
+        {/* Word Display Card */}
         <div className="flex-1 flex flex-col items-center justify-center py-12">
           <div className={`w-full aspect-[16/10] rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.02] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''} ${hasError ? 'border-amber-500/40' : ''}`}>
             
-            {/* 引擎状态指示器 - 移动至中央卡片内部 */}
-            <div className="absolute top-8 right-10">
-              <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border backdrop-blur-md shadow-lg transition-all duration-500 ${activeEngine === 'Web Speech' ? 'border-emerald-500/20' : 'border-indigo-500/20'}`}>
-                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${activeEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.6)]'}`} />
-                {activeEngine === 'Web Speech' ? (
-                   <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                ) : (
-                   <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-                )}
-                <div className="flex flex-col items-start leading-none">
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${activeEngine === 'Web Speech' ? 'text-emerald-400' : 'text-indigo-400'}`}>
-                    {activeEngine === 'Web Speech' ? 'Offline' : 'AI Cloud'}
-                  </span>
-                  <span className="text-[6px] text-white/30 font-bold uppercase tracking-tighter mt-0.5">TTS Engine Active</span>
-                </div>
-              </div>
-            </div>
-
             <div className="relative text-center w-full h-48 flex flex-col items-center justify-center">
               {hasError ? (
                 <div className="flex flex-col items-center space-y-4 text-amber-400">
@@ -172,27 +156,46 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
           </div>
         </div>
 
+        {/* Controls and Progress */}
         <div className="space-y-12">
-          <div className="flex items-center justify-center space-x-8">
-            <button onClick={handlePrevious} disabled={currentIndex === 0} className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 disabled:opacity-20 transition-all active:scale-90 shadow-xl">
-              <SkipBack className="w-8 h-8 fill-current" />
-            </button>
+          
+          <div className="relative flex flex-col items-center">
+            {/* 引擎状态指示器 - 播报按钮上方居中 */}
+            <div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
+              <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border backdrop-blur-md shadow-xl transition-all duration-500 ${activeEngine === 'Web Speech' ? 'border-emerald-500/20' : 'border-indigo-500/20'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${activeEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.6)]'}`} />
+                {activeEngine === 'Web Speech' ? (
+                   <Zap className="w-3 h-3 text-emerald-400" />
+                ) : (
+                   <Cpu className="w-3 h-3 text-indigo-400" />
+                )}
+                <span className={`text-[9px] font-black uppercase tracking-[0.15em] ${activeEngine === 'Web Speech' ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                  {activeEngine === 'Web Speech' ? 'Offline Engine' : 'AI Cloud Engine'}
+                </span>
+              </div>
+            </div>
 
-            <button onClick={handleManualPlay} className={`w-28 h-28 rounded-[2.5rem] flex items-center justify-center transition-all duration-500 shadow-2xl active:scale-90 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/50' : 'bg-white text-slate-950 hover:scale-110'}`}>
-              {isPlaying ? (
-                <div className="flex items-center space-x-1.5">
-                  <div className="w-2 h-8 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
-                  <div className="w-2 h-10 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
-                  <div className="w-2 h-8 bg-white rounded-full animate-bounce" />
-                </div>
-              ) : (
-                <RotateCcw className="w-10 h-10" />
-              )}
-            </button>
+            <div className="flex items-center justify-center space-x-8">
+              <button onClick={handlePrevious} disabled={currentIndex === 0} className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 disabled:opacity-20 transition-all active:scale-90 shadow-xl">
+                <SkipBack className="w-8 h-8 fill-current" />
+              </button>
 
-            <button onClick={handleNext} className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-all active:scale-90 shadow-xl">
-              <SkipForward className="w-8 h-8 fill-current" />
-            </button>
+              <button onClick={handleManualPlay} className={`w-28 h-28 rounded-[2.5rem] flex items-center justify-center transition-all duration-500 shadow-2xl active:scale-90 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/50' : 'bg-white text-slate-950 hover:scale-110'}`}>
+                {isPlaying ? (
+                  <div className="flex items-center space-x-1.5">
+                    <div className="w-2 h-8 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <div className="w-2 h-10 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <div className="w-2 h-8 bg-white rounded-full animate-bounce" />
+                  </div>
+                ) : (
+                  <RotateCcw className="w-10 h-10" />
+                )}
+              </button>
+
+              <button onClick={handleNext} className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-all active:scale-90 shadow-xl">
+                <SkipForward className="w-8 h-8 fill-current" />
+              </button>
+            </div>
           </div>
 
           <div className="px-6">

@@ -1,18 +1,45 @@
 
-import React, { useState } from 'react';
-import { X, ShieldCheck, Trash2, Zap, Globe, Volume2, PlayCircle, Loader2, Sparkles, AlertCircle, Info, Languages } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ShieldCheck, Trash2, Zap, Globe, Volume2, PlayCircle, Loader2, Sparkles, AlertCircle, Info, Languages, Monitor, Smartphone, MessageSquare, Terminal, Copy, CheckCircle2 } from 'lucide-react';
 import { testGeminiConnectivity, speakWithAiTTS, speakWordLocal } from '../services/geminiService';
 
 interface DebugConsoleProps {
   onClose: () => void;
 }
 
+interface EnvInfo {
+  userAgent: string;
+  platform: string;
+  language: string;
+  isMobile: boolean;
+  isWechat: boolean;
+  localTtsSupport: boolean;
+  screenSize: string;
+}
+
 const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<'api' | 'tts'>('api');
+  const [activeTab, setActiveTab] = useState<'api' | 'tts' | 'env'>('api');
   const [logs, setLogs] = useState<{time: string, type: string, msg: string}[]>([]);
   const [isTestingApi, setIsTestingApi] = useState(false);
   const [isTestingTTS, setIsTestingTTS] = useState(false);
   const [apiStatus, setApiStatus] = useState<{success?: boolean, msg?: string, latency?: number} | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // 环境信息抓取
+  const [envInfo, setEnvInfo] = useState<EnvInfo | null>(null);
+
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    setEnvInfo({
+      userAgent: ua,
+      platform: navigator.platform,
+      language: navigator.language,
+      isMobile: /iPhone|iPad|iPod|Android/i.test(ua),
+      isWechat: /MicroMessenger/i.test(ua),
+      localTtsSupport: !!(window.speechSynthesis),
+      screenSize: `${window.screen.width} x ${window.screen.height}`
+    });
+  }, []);
 
   const addLog = (type: 'info' | 'success' | 'error' | 'warn', msg: string) => {
     const now = new Date();
@@ -49,6 +76,24 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     }
   };
 
+  const copyEnvSummary = () => {
+    if (!envInfo) return;
+    const summary = `
+LingoEcho Environment Summary:
+---------------------------
+Platform: ${envInfo.isMobile ? 'Mobile' : 'Desktop'} (${envInfo.platform})
+WeChat: ${envInfo.isWechat ? 'Yes' : 'No'}
+Local TTS: ${envInfo.localTtsSupport ? 'Supported' : 'Not Supported'}
+Screen: ${envInfo.screenSize}
+Language: ${envInfo.language}
+UA: ${envInfo.userAgent}
+    `.trim();
+    navigator.clipboard.writeText(summary);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    addLog('info', '环境摘要已复制到剪贴板');
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-5xl h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-slate-200 animate-in fade-in zoom-in-95 duration-300">
@@ -69,11 +114,12 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
         <div className="flex px-8 border-b bg-white shrink-0">
           <button onClick={() => setActiveTab('api')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>API 连通性</button>
           <button onClick={() => setActiveTab('tts')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'tts' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>语音合成实验室</button>
+          <button onClick={() => setActiveTab('env')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'env' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>运行环境信息</button>
         </div>
 
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-10">
-            {activeTab === 'api' ? (
+          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            {activeTab === 'api' && (
               <div className="space-y-8">
                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
                   <div className="flex items-center gap-3">
@@ -103,7 +149,9 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                   )}
                 </div>
               </div>
-            ) : (
+            )}
+
+            {activeTab === 'tts' && (
               <div className="space-y-8">
                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-6">
                   <div className="flex items-center gap-3">
@@ -112,7 +160,6 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Local TTS Test */}
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
                       <div className="flex justify-between items-start">
                         <div className="px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-md uppercase">Offline Engine</div>
@@ -129,7 +176,6 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                       </button>
                     </div>
 
-                    {/* AI TTS Test */}
                     <div className="bg-white p-5 rounded-2xl border border-indigo-50 shadow-sm space-y-4">
                       <div className="flex justify-between items-start">
                         <div className="px-2 py-1 bg-indigo-50 text-indigo-500 text-[10px] font-black rounded-md uppercase">AI Cloud Engine</div>
@@ -153,6 +199,87 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                       诊断建议：如果在微信中“本地测试”无反应，请务必确保已配置有效的 API Key 并执行“AI 测试”。云端 AI-TTS 是移动端环境下发声的最终保障。
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'env' && envInfo && (
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Basic Device Card */}
+                  <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
+                    <div className="flex items-center gap-3">
+                      {envInfo.isMobile ? <Smartphone className="w-5 h-5 text-indigo-500" /> : <Monitor className="w-5 h-5 text-indigo-500" />}
+                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">设备基础信息</h3>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">平台类型</span>
+                        <span className="text-[10px] font-black bg-white px-2 py-1 rounded-md border border-slate-100">{envInfo.isMobile ? '移动端 (Mobile)' : '桌面端 (Desktop)'}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">操作系统</span>
+                        <span className="text-[10px] font-black text-slate-700">{envInfo.platform}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">屏幕分辨率</span>
+                        <span className="text-[10px] font-black text-slate-700">{envInfo.screenSize}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Context Card */}
+                  <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <MessageSquare className="w-5 h-5 text-emerald-500" />
+                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">特殊环境检测</h3>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">微信环境 (WeChat)</span>
+                        <span className={`text-[10px] font-black px-2 py-1 rounded-md ${envInfo.isWechat ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                          {envInfo.isWechat ? '检测到 (YES)' : '未检测到 (NO)'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">本地语音支持</span>
+                        <span className={`text-[10px] font-black px-2 py-1 rounded-md ${envInfo.localTtsSupport ? 'bg-indigo-500 text-white' : 'bg-red-500 text-white'}`}>
+                          {envInfo.localTtsSupport ? '支持 (Supported)' : '不支持 (Not Found)'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">系统语言</span>
+                        <span className="text-[10px] font-black text-slate-700 uppercase">{envInfo.language}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* User Agent Block */}
+                <div className="p-6 bg-slate-900 rounded-3xl border border-slate-800 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 text-white">
+                      <Terminal className="w-5 h-5 text-indigo-400" />
+                      <h3 className="text-sm font-black uppercase tracking-widest">浏览器识别符 (User Agent)</h3>
+                    </div>
+                    <button 
+                      onClick={copyEnvSummary}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[10px] font-black rounded-xl transition-all active:scale-95"
+                    >
+                      {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copied ? '已复制' : '复制环境摘要'}
+                    </button>
+                  </div>
+                  <div className="p-4 bg-black/50 rounded-2xl border border-white/5 font-mono text-[10px] text-slate-400 break-all leading-relaxed tracking-tight">
+                    {envInfo.userAgent}
+                  </div>
+                </div>
+
+                <div className="flex gap-4 p-5 bg-indigo-50 rounded-2xl border border-indigo-100">
+                  <Info className="w-5 h-5 text-indigo-500 mt-0.5 shrink-0" />
+                  <p className="text-[10px] text-indigo-900 font-bold leading-relaxed">
+                    技术提示：微信内置浏览器 (XWeb) 对 Web Speech API 的支持较为有限且不稳定。如果在该环境下无法听到本地声音，系统将自动回退至“AI Cloud Engine”。
+                  </p>
                 </div>
               </div>
             )}
