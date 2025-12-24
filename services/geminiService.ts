@@ -2,8 +2,8 @@
 import { GoogleGenAI } from "@google/genai";
 
 /**
- * Gemini API 服务模块
- * 已针对微信/移动端 WebView 进行兼容性优化
+ * LingoEcho 服务模块
+ * 已深度适配微信/移动端：集成智谱 GLM-TTS 解决本地语音驱动缺失问题
  */
 
 const getApiKey = () => {
@@ -17,109 +17,182 @@ const getApiKey = () => {
 const apiKey = getApiKey();
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
-export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
+// 全局 AudioContext 缓存
+let sharedAudioCtx: AudioContext | null = null;
+
+const getAudioContext = () => {
+  if (!sharedAudioCtx) {
+    sharedAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+  }
+  return sharedAudioCtx;
+};
+
+/**
+ * 智谱 AI 云端语音合成 (GLM-TTS)
+ * 解决移动端/微信本地 TTS 缺失的终极方案
+ */
+export async function speakWithZhipuTTS(text: string): Promise<void> {
+  const currentKey = getApiKey();
+  if (!currentKey) throw new Error("API Key Missing");
+
+  try {
+    const response = await fetch("https://open.bigmodel.cn/api/paas/v4/audio/speech", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${currentKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "glm-tts",
+        input: text,
+        voice: "female",
+        speed: 1.0,
+        volume: 1.0,
+        response_format: "wav"
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error?.message || `智谱 API 异常: ${response.status}`);
+    }
+
+    // 获取 WAV 二进制流
+    const arrayBuffer = await response.arrayBuffer();
+    const ctx = getAudioContext();
+    
+    // 微信环境下必须由用户手势解锁后 resume
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    // 使用标准 decodeAudioData 解析 WAV 格式
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
+    
+    return new Promise((resolve) => {
+      source.onended = () => resolve();
+      source.start();
+    });
+  } catch (error) {
+    console.error("Zhipu TTS Failed:", error);
+    throw error;
+  }
+}
+
+/**
+ * 显式的本地浏览器语音合成测试
+ */
+export const speakWordLocal = async (text: string): Promise<void> => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    throw new Error("SpeechSynthesis not supported in this browser");
+  }
+
+  return new Promise((resolve, reject) => {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
+    utterance.rate = 0.9;
+    
+    utterance.onend = () => resolve();
+    utterance.onerror = (e) => reject(new Error(`Local TTS Error: ${e.error}`));
+
+    window.speechSynthesis.speak(utterance);
+    // 某些浏览器需要周期性 resume
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+  });
+};
+
+/**
+ * 统一语音入口：智能切换本地/云端驱动
+ */
+export const speakWord = async (text: string): Promise<void> => {
+  // 1. 尝试使用本地浏览器驱动 (如果可用)
+  const supportsLocal = typeof window !== 'undefined' && 
+                        window.speechSynthesis && 
+                        window.speechSynthesis.getVoices().length > 0;
+
+  if (supportsLocal) {
+    return new Promise((resolve) => {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
+      utterance.rate = 0.9;
+      
+      const safetyTimeout = setTimeout(() => {
+        console.warn("Local TTS Timeout -> Switching to Zhipu AI");
+        speakWithZhipuTTS(text).then(resolve).catch(resolve);
+      }, 2000); // 2秒未播放则强制切换云端
+
+      utterance.onend = () => {
+        clearTimeout(safetyTimeout);
+        resolve();
+      };
+
+      utterance.onerror = () => {
+        clearTimeout(safetyTimeout);
+        speakWithZhipuTTS(text).then(resolve).catch(resolve);
+      };
+
+      window.speechSynthesis.speak(utterance);
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    });
+  } else {
+    // 2. 本地驱动缺失 (微信环境)，直接调用智谱 AI
+    return speakWithZhipuTTS(text);
+  }
+};
+
+/**
+ * 音频解锁：同时激活本地和 AudioContext 权限
+ */
+export const unlockAudio = (): void => {
+  if (typeof window !== 'undefined') {
+    // 激活 Web Speech 队列
+    if (window.speechSynthesis) {
+      const silent = new SpeechSynthesisUtterance(" ");
+      silent.volume = 0;
+      window.speechSynthesis.speak(silent);
+    }
+    // 激活 AudioContext (对云端语音至关重要)
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(console.error);
+    }
+  }
+};
+
+/**
+ * 基础 API 功能保留
+ */
+export const testGeminiConnectivity = async () => {
   const start = Date.now();
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: 'ping',
     });
-    const latency = Date.now() - start;
-    if (response.text) {
-      return { success: true, message: "Gemini API 连接成功", latency };
-    }
-    throw new Error("模型响应为空");
+    return { success: true, message: "Gemini API 连接正常", latency: Date.now() - start };
   } catch (error: any) {
-    return { success: false, message: error.message || "未知错误", latency: Date.now() - start };
+    return { success: false, message: error.message || "连接失败", latency: Date.now() - start };
   }
 };
 
-export const cleanOcrOutput = (rawText: string): string[] => {
-  if (!rawText) return [];
-  return rawText.split('\n')
-    .map(w => w.trim())
-    .filter(w => {
-      if (!w || /^\d+$/.test(w)) return false;
-      const noise = ['section', 'page', 'chapter', 'vocabulary', '页', '**', '---'];
-      return !noise.some(k => w.toLowerCase().includes(k));
-    })
-    .map(w => w.replace(/[\*\-_]/g, '').trim());
-};
-
-export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
+export const extractWordsFromImage = async (base64Data: string) => {
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [
           { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
-          { text: "Extract words, one per line." }
+          { text: "Extract English/Chinese words, one per line." }
         ]
       }
     });
-    const rawText = response.text || "";
-    const cleaned = cleanOcrOutput(rawText);
-    return returnRaw ? { raw: rawText, cleaned } : cleaned;
+    const text = response.text || "";
+    return text.split('\n').map(w => w.trim()).filter(w => w && !/^\d+$/.test(w));
   } catch (error: any) {
     throw new Error(error.message || "图像解析失败");
-  }
-};
-
-/**
- * 针对移动端优化的 TTS 播放函数
- */
-export const speakWord = (text: string): Promise<void> => {
-  return new Promise((resolve) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      console.warn("SpeechSynthesis not supported");
-      resolve();
-      return;
-    }
-
-    // 强制取消之前的播放，防止状态卡死
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const isChinese = /[\u4e00-\u9fa5]/.test(text);
-    utterance.lang = isChinese ? 'zh-CN' : 'en-US';
-    utterance.rate = 0.9;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    // 移动端补丁：防止 onend 事件由于内存垃圾回收或其他原因不触发
-    const safetyTimeout = setTimeout(() => {
-      console.log("TTS Safety timeout triggered");
-      resolve();
-    }, (text.length * 500) + 2000); 
-
-    utterance.onend = () => {
-      clearTimeout(safetyTimeout);
-      resolve();
-    };
-
-    utterance.onerror = (e) => {
-      console.error("TTS Error:", e);
-      clearTimeout(safetyTimeout);
-      resolve();
-    };
-
-    // 微信/iOS 兼容性：确保有音量且正在播放
-    window.speechSynthesis.speak(utterance);
-    
-    // 某些 WebView 需要周期性 resume 来唤醒播放队列
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-  });
-};
-
-/**
- * 音频解锁：由用户点击触发，解决移动端自动播放限制
- */
-export const unlockAudio = (): void => {
-  if (typeof window !== 'undefined' && window.speechSynthesis) {
-    const silent = new SpeechSynthesisUtterance(" ");
-    silent.volume = 0;
-    window.speechSynthesis.speak(silent);
   }
 };
