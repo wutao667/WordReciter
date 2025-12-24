@@ -7,6 +7,16 @@ import DebugConsole from './components/DebugConsole';
 import { extractWordsFromImage } from './services/geminiService';
 import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon } from 'lucide-react';
 
+// 兼容性 ID 生成器，解决微信/低版本浏览器不支持 crypto.randomUUID 的问题
+const generateId = () => {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch (e) {}
+  return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+};
+
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,7 +40,7 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   useEffect(() => {
     if (isDebugOpen && recognitionRef.current) {
@@ -207,7 +217,7 @@ const App: React.FC = () => {
     if (editingList) {
       setLists(prev => prev.map(l => l.id === editingList.id ? { ...l, name: finalName, words } : l));
     } else {
-      setLists(prev => [{ id: crypto.randomUUID(), name: finalName, words, createdAt: Date.now() }, ...prev]);
+      setLists(prev => [{ id: generateId(), name: finalName, words, createdAt: Date.now() }, ...prev]);
     }
     setIsModalOpen(false);
     stopListening();
@@ -228,12 +238,6 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-3">
-            {!process.env.API_KEY && (
-              <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl border border-amber-100 animate-pulse">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-[10px] font-black uppercase">需设置 API_KEY</span>
-              </div>
-            )}
             <button 
               onClick={() => setIsDebugOpen(true)} 
               className="bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-500 p-3 rounded-2xl transition-all group relative"

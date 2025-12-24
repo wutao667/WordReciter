@@ -6,8 +6,19 @@ import { GoogleGenAI } from "@google/genai";
  * 已切换至 Google GenAI SDK
  */
 
-// Initialize the Google GenAI SDK with the API key from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// 安全地获取 API Key
+const getApiKey = () => {
+  try {
+    return (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
+  } catch (e) {
+    return '';
+  }
+};
+
+const apiKey = getApiKey();
+
+// Initialize the Google GenAI SDK with the API key
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 /**
  * 验证 API 连通性
@@ -15,7 +26,6 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
   const start = Date.now();
   try {
-    // Fix: Using official SDK method generateContent to test connectivity
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: 'ping',
@@ -35,6 +45,7 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
  * 内部清洗逻辑：从模型输出中提取纯净单词
  */
 export const cleanOcrOutput = (rawText: string): string[] => {
+  if (!rawText) return [];
   return rawText.split('\n')
     .map(w => w.trim())
     .filter(w => {
@@ -63,8 +74,8 @@ export const cleanOcrOutput = (rawText: string): string[] => {
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {
-    // Fix: Re-initialize to ensure latest API key if dynamically injected and use the official SDK methods.
-    const aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const currentApiKey = getApiKey();
+    const aiInstance = new GoogleGenAI({ apiKey: currentApiKey });
     const response = await aiInstance.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
@@ -107,11 +118,16 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
 
 export const speakWord = (text: string): Promise<void> => {
   return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      resolve();
+      return;
+    }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
     utterance.rate = 0.85;
     utterance.onend = () => resolve();
+    utterance.onerror = () => resolve(); // 即使报错也 resolve，防止卡死
     window.speechSynthesis.speak(utterance);
   });
 };
