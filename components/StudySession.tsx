@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
-import { speakWord, getPreferredTTSEngine, unlockAudioContext } from '../services/geminiService';
+import { speakWord, getPreferredTTSEngine, unlockAudioContext, stopAllSpeech } from '../services/geminiService';
 import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, Cpu, Zap, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface StudySessionProps {
@@ -20,10 +20,8 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const isComponentMounted = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-  const stopAllAudio = useCallback(() => {
-    window.speechSynthesis?.cancel();
+  const stopPlayback = useCallback(() => {
+    stopAllSpeech(); // 调用 service 层的统一清理函数
     if (abortControllerRef.current) abortControllerRef.current.abort();
     setIsPlaying(false);
   }, []);
@@ -34,14 +32,15 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     
     return () => {
       isComponentMounted.current = false;
-      stopAllAudio();
+      stopPlayback();
     };
-  }, [list.words, stopAllAudio]);
+  }, [list.words, stopPlayback]);
 
   const startSequence = useCallback(async () => {
-    if (!shuffledWords[currentIndex]) return;
+    const word = shuffledWords[currentIndex];
+    if (!word) return;
     
-    stopAllAudio();
+    stopPlayback();
     setHasError(false);
     
     const controller = new AbortController();
@@ -49,39 +48,39 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     setIsPlaying(true);
     
     try {
-      // 循环播放 3 次
-      for (let i = 0; i < 3; i++) {
-        if (controller.signal.aborted || !isComponentMounted.current) break;
-        
-        // 使用当前选中的引擎进行播报
-        await speakWord(shuffledWords[currentIndex], activeEngine);
-        
-        if (i < 2 && !controller.signal.aborted && isComponentMounted.current) {
-          await delay(1500); 
-        }
+      /**
+       * 核心优化：
+       * 不再使用 for 循环多次调用播放。
+       * 而是将文本拼接为 "Word, Word, Word"。
+       * 标点符号会引导 TTS 引擎在词与词之间产生自然的停顿。
+       * 这样在微信中只需调用一次播放，完美绕开拦截机制。
+       */
+      const repeatedText = `${word}。 ${word}。 ${word}`;
+      
+      await speakWord(repeatedText, activeEngine);
+      
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error("Playback failed:", err);
+        if (isComponentMounted.current) setHasError(true);
       }
-    } catch (err) {
-      console.error("Playback failed:", err);
-      if (isComponentMounted.current) setHasError(true);
     } finally {
       if (!controller.signal.aborted && isComponentMounted.current) {
         setIsPlaying(false);
       }
     }
-  }, [shuffledWords, currentIndex, stopAllAudio, activeEngine]);
+  }, [shuffledWords, currentIndex, stopPlayback, activeEngine]);
 
   const handleManualPlay = () => {
     unlockAudioContext();
     startSequence();
   };
 
-  // 切换播报引擎
   const toggleEngine = () => {
-    stopAllAudio();
+    stopPlayback();
     const nextEngine = activeEngine === 'Web Speech' ? 'AI-TTS' : 'Web Speech';
     setActiveEngine(nextEngine);
     unlockAudioContext();
-    // 切换后立即重试播放当前单词
     setTimeout(() => {
         if (isComponentMounted.current) startSequence();
     }, 100);
@@ -132,7 +131,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         <div className="flex-1 flex flex-col items-center justify-center py-12">
           <div className={`w-full aspect-[16/10] rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.02] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''} ${hasError ? 'border-amber-500/40' : ''}`}>
             
-            {/* 引擎状态指示 & 切换按钮 */}
             <div className="absolute top-8 flex items-center gap-4">
                 <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/5">
                 {activeEngine === 'Web Speech' ? <Zap className="w-3 h-3 text-emerald-400" /> : <Cpu className="w-3 h-3 text-indigo-400" />}

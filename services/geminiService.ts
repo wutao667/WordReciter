@@ -10,7 +10,9 @@ const MODEL_NAME = 'glm-4.6v-flash';
 
 // 环境检测常量
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+// 引用当前正在播放的音频对象，用于中断播放
+let currentAiAudio: HTMLAudioElement | null = null;
 
 /**
  * 验证 API 连通性
@@ -43,6 +45,22 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
 };
 
 /**
+ * 停止所有正在进行的播报（本地 + 云端）
+ */
+export const stopAllSpeech = () => {
+  // 停止本地 TTS
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  // 停止云端 Audio
+  if (currentAiAudio) {
+    currentAiAudio.pause();
+    currentAiAudio.src = "";
+    currentAiAudio = null;
+  }
+};
+
+/**
  * 方案 A: 浏览器本地语音合成
  */
 export const speakWordLocal = (text: string): Promise<void> => {
@@ -51,7 +69,6 @@ export const speakWordLocal = (text: string): Promise<void> => {
       reject(new Error("不支持本地语音"));
       return;
     }
-    // 微信中本地语音极不稳定
     if (isWechat) {
       reject(new Error("微信环境建议使用 AI 引擎"));
       return;
@@ -60,7 +77,7 @@ export const speakWordLocal = (text: string): Promise<void> => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
-    utterance.rate = 0.85;
+    utterance.rate = 0.8; // 稍微放慢一点，方便听写
     utterance.onend = () => resolve();
     utterance.onerror = (e) => reject(new Error(`本地错误: ${e.error}`));
     window.speechSynthesis.speak(utterance);
@@ -75,6 +92,8 @@ export const speakWordLocal = (text: string): Promise<void> => {
  * 方案 B: 云端 AI-TTS 语音合成
  */
 export const speakWithAiTTS = async (text: string): Promise<void> => {
+  stopAllSpeech(); // 播放前先清理
+
   const response = await fetch(AI_TTS_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -85,7 +104,7 @@ export const speakWithAiTTS = async (text: string): Promise<void> => {
       model: "glm-tts",
       input: text,
       voice: "female",
-      speed: 1.0,
+      speed: 0.9, // 听写模式稍微减速
       volume: 1.0,
       response_format: "wav"
     })
@@ -99,6 +118,7 @@ export const speakWithAiTTS = async (text: string): Promise<void> => {
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  currentAiAudio = audio;
 
   return new Promise((resolve, reject) => {
     const playPromise = audio.play();
@@ -107,23 +127,26 @@ export const speakWithAiTTS = async (text: string): Promise<void> => {
       playPromise.then(() => {
         audio.onended = () => {
           URL.revokeObjectURL(url);
+          if (currentAiAudio === audio) currentAiAudio = null;
           resolve();
         };
       }).catch(err => {
         URL.revokeObjectURL(url);
+        if (currentAiAudio === audio) currentAiAudio = null;
         reject(new Error("被浏览器拦截，请点击界面重试"));
       });
     }
 
     audio.onerror = () => {
       URL.revokeObjectURL(url);
+      if (currentAiAudio === audio) currentAiAudio = null;
       reject(new Error("音频流加载失败"));
     };
   });
 };
 
 /**
- * 播报系统预热（Unlock）
+ * 播报系统预热
  */
 export const unlockAudioContext = () => {
   try {
@@ -136,22 +159,13 @@ export const unlockAudioContext = () => {
   }
 };
 
-/**
- * 智能检测当前环境下首选的 TTS 引擎
- */
 export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
   if (isWechat) return 'AI-TTS';
   const hasLocal = !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
   return hasLocal ? 'Web Speech' : 'AI-TTS';
 };
 
-/**
- * 统一调度
- * @param text 要播报的文字
- * @param forceEngine 强制指定的引擎
- */
 export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-TTS'): Promise<'Web Speech' | 'AI-TTS'> => {
-  // 如果明确指定了引擎
   if (forceEngine === 'AI-TTS') {
     await speakWithAiTTS(text);
     return 'AI-TTS';
@@ -161,7 +175,6 @@ export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-T
     return 'Web Speech';
   }
 
-  // 否则走默认逻辑
   const preferred = getPreferredTTSEngine();
   if (preferred === 'AI-TTS' && process.env.API_KEY) {
     await speakWithAiTTS(text);
@@ -181,7 +194,7 @@ export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-T
 };
 
 /**
- * OCR 提取
+ * OCR 提取：剔除数字
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {
