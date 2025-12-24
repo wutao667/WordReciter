@@ -67,11 +67,7 @@ export const speakWordLocal = (text: string, signal?: AbortSignal): Promise<void
       reject(new Error("不支持本地语音"));
       return;
     }
-    if (isWechat) {
-      reject(new Error("微信环境建议使用 AI 引擎"));
-      return;
-    }
-
+    // 强制尝试，不再直接拒绝，交由 UI 层控制
     const onAbort = () => {
       window.speechSynthesis.cancel();
       reject(new Error("AbortError"));
@@ -185,33 +181,39 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
 };
 
 /**
- * 智能选择引擎
+ * 检测本地 TTS 是否可用
  */
-export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
-  if (isWechat) return 'AI-TTS';
-  const hasLocal = !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
-  return hasLocal ? 'Web Speech' : 'AI-TTS';
+export const isLocalTTSSupported = (): boolean => {
+  if (isWechat) return false;
+  return !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
 };
 
 /**
- * 统一调度：优先本地，自动回退到 AI
+ * 智能选择引擎
  */
-export const speakWord = async (text: string, signal?: AbortSignal): Promise<'Web Speech' | 'AI-TTS'> => {
-  const preferred = getPreferredTTSEngine();
+export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
+  return isLocalTTSSupported() ? 'Web Speech' : 'AI-TTS';
+};
+
+/**
+ * 统一调度：优先尊重 forcedEngine，其次智能选择
+ */
+export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine?: 'Web Speech' | 'AI-TTS'): Promise<'Web Speech' | 'AI-TTS'> => {
+  const engineToUse = forcedEngine || getPreferredTTSEngine();
   
-  // 如果首选是 AI（如微信环境），直接走 AI
-  if (preferred === 'AI-TTS' && process.env.API_KEY) {
+  // 如果指定用 AI 且有 Key
+  if (engineToUse === 'AI-TTS' && process.env.API_KEY) {
     await speakWithAiTTS(text, signal);
     return 'AI-TTS';
   }
 
-  // 否则尝试本地，失败则尝试 AI
+  // 尝试用本地，如果失败则回退 AI
   try {
     await speakWordLocal(text, signal);
     return 'Web Speech';
   } catch (error: any) {
     if (error.message === 'AbortError') throw error;
-    // 本地失败且有 API Key，回退到 AI
+    // 本地报错，如果不是主动中断，尝试回退 AI
     if (process.env.API_KEY) {
       await speakWithAiTTS(text, signal);
       return 'AI-TTS';

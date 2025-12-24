@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
-import { speakWord, stopAllSpeech, getPreferredTTSEngine } from '../services/geminiService';
-import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cpu } from 'lucide-react';
+import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported } from '../services/geminiService';
+import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cpu, Lock } from 'lucide-react';
 
 interface StudySessionProps {
   list: WordList;
@@ -15,8 +15,12 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWordVisible, setIsWordVisible] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const [activeEngine, setActiveEngine] = useState<'Web Speech' | 'AI-TTS'>(getPreferredTTSEngine());
   
+  // 引擎选择状态
+  const [selectedEngine, setSelectedEngine] = useState<'Web Speech' | 'AI-TTS'>(getPreferredTTSEngine());
+  const [activeEngine, setActiveEngine] = useState<'Web Speech' | 'AI-TTS'>(selectedEngine);
+  const localAvailable = isLocalTTSSupported();
+
   const isComponentMounted = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -52,7 +56,8 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     
     try {
       const repeatedText = `${word}; ${word}; ${word}.`;
-      const engineUsed = await speakWord(repeatedText, controller.signal);
+      // 传入用户选择的引擎
+      const engineUsed = await speakWord(repeatedText, controller.signal, selectedEngine);
       
       if (isComponentMounted.current) {
         setActiveEngine(engineUsed);
@@ -68,7 +73,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         setIsPlaying(false);
       }
     }
-  }, [shuffledWords, currentIndex, stopPlayback]);
+  }, [shuffledWords, currentIndex, stopPlayback, selectedEngine]);
 
   const handleManualPlay = () => {
     startSequence();
@@ -87,6 +92,14 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
 
   const handlePrevious = () => {
     if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
+  };
+
+  const toggleEngine = () => {
+    if (!localAvailable) return;
+    const next = selectedEngine === 'Web Speech' ? 'AI-TTS' : 'Web Speech';
+    setSelectedEngine(next);
+    // 切换后立即重播
+    setTimeout(() => handleManualPlay(), 10);
   };
 
   if (shuffledWords.length === 0) return null;
@@ -160,19 +173,38 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         <div className="space-y-4 md:space-y-12">
           
           <div className="relative flex flex-col items-center">
-            {/* 引擎状态指示器 - 播报按钮上方居中 */}
+            {/* 引擎状态切换器 - 升级为交互控件 */}
             <div className="mb-4 md:mb-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
-              <div className={`flex items-center gap-2 px-3 py-1 md:px-3.5 md:py-1.5 rounded-full bg-white/5 border backdrop-blur-md shadow-xl transition-all duration-500 ${activeEngine === 'Web Speech' ? 'border-emerald-500/20' : 'border-indigo-500/20'}`}>
-                <div className={`w-1 h-1 md:w-1.5 md:h-1.5 rounded-full animate-pulse ${activeEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.6)]'}`} />
-                {activeEngine === 'Web Speech' ? (
-                   <Zap className="w-2.5 h-2.5 md:w-3 md:h-3 text-emerald-400" />
+              <button 
+                onClick={toggleEngine}
+                disabled={!localAvailable}
+                className={`group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full border backdrop-blur-md shadow-xl transition-all duration-500 active:scale-95 ${!localAvailable ? 'bg-slate-900/50 border-white/5 opacity-80' : 'bg-white/5 hover:bg-white/10 cursor-pointer'} ${selectedEngine === 'Web Speech' ? 'border-emerald-500/30' : 'border-indigo-500/30'}`}
+              >
+                <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full animate-pulse ${selectedEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.6)]'}`} />
+                
+                {selectedEngine === 'Web Speech' ? (
+                   <Zap className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-400" />
                 ) : (
-                   <Cpu className="w-2.5 h-2.5 md:w-3 md:h-3 text-indigo-400" />
+                   <Cpu className="w-3 h-3 md:w-3.5 md:h-3.5 text-indigo-400" />
                 )}
-                <span className={`text-[8px] md:text-[9px] font-black uppercase tracking-[0.15em] ${activeEngine === 'Web Speech' ? 'text-emerald-400' : 'text-indigo-400'}`}>
-                  {activeEngine === 'Web Speech' ? 'Offline' : 'AI Cloud'}
-                </span>
-              </div>
+
+                <div className="flex flex-col items-start leading-none">
+                  <span className={`text-[8px] md:text-[9px] font-black uppercase tracking-[0.15em] ${selectedEngine === 'Web Speech' ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                    {selectedEngine === 'Web Speech' ? 'Offline Engine' : 'AI Cloud Engine'}
+                  </span>
+                  {!localAvailable && (
+                    <span className="text-[7px] text-slate-500 font-bold uppercase mt-0.5 flex items-center gap-1">
+                      <Lock className="w-2 h-2" /> Web TTS Unavailable
+                    </span>
+                  )}
+                </div>
+
+                {localAvailable && (
+                  <div className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <RotateCcw className="w-2.5 h-2.5 text-slate-500" />
+                  </div>
+                )}
+              </button>
             </div>
 
             <div className="flex items-center justify-center space-x-6 md:space-x-8">
