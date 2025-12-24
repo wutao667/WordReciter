@@ -50,7 +50,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
       for (let i = 0; i < 3; i++) {
         if (controller.signal.aborted || !isComponentMounted.current) break;
         const usedEngine = await speakWord(shuffledWords[currentIndex]);
-        // 如果在播放过程中发现实际使用的引擎与预想不符（比如本地引擎突然失败），则更新 UI
+        // 如果在播放过程中发现实际使用的引擎与预想不符，则更新 UI
         if (usedEngine !== activeEngine) setActiveEngine(usedEngine);
         
         if (i < 2 && !controller.signal.aborted && isComponentMounted.current) await delay(1200);
@@ -105,7 +105,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         <div className="flex-1 flex flex-col items-center justify-center py-12">
           <div className={`w-full aspect-[16/10] rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.02] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''}`}>
             
-            {/* 引擎状态指示 - 位于卡片顶部内部 */}
+            {/* 引擎状态指示 */}
             <div className="absolute top-8 flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/5">
               {activeEngine === 'Web Speech' ? <Zap className="w-3 h-3 text-emerald-400" /> : <Cpu className="w-3 h-3 text-indigo-400" />}
               <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">
@@ -173,7 +173,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
               
               {/* 引擎名称展示 - 细小的灰色提示词 */}
               <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] flex items-center gap-2">
-                当前驱动: <span className={activeEngine === 'GLM-TTS' ? 'text-indigo-400/40' : 'text-emerald-400/40'}>{activeEngine}</span>
+                当前驱动: <span className={activeEngine === 'AI-TTS' ? 'text-indigo-400/40' : 'text-emerald-400/40'}>{activeEngine}</span>
               </span>
 
               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">已完成 {Math.round(progress)}%</span>

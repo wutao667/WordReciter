@@ -1,11 +1,11 @@
 
 /**
- * GLM API 服务模块
- * 集成智谱 AI GLM-4.6v-flash (OCR) 与 GLM-TTS (语音合成)
+ * AI API 服务模块
+ * 集成云端 AI 视觉 (OCR) 与 AI-TTS (语音合成)
  */
 
-const GLM_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-const GLM_TTS_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/audio/speech';
+const AI_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+const AI_TTS_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/audio/speech';
 const MODEL_NAME = 'glm-4.6v-flash';
 
 /**
@@ -14,7 +14,7 @@ const MODEL_NAME = 'glm-4.6v-flash';
 export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
   const start = Date.now();
   try {
-    const response = await fetch(GLM_ENDPOINT, {
+    const response = await fetch(AI_ENDPOINT, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.API_KEY}`,
@@ -29,7 +29,7 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
 
     const latency = Date.now() - start;
     if (response.ok) {
-      return { success: true, message: "GLM API 连接成功", latency };
+      return { success: true, message: "AI 服务连接成功", latency };
     }
     const errorData = await response.json();
     throw new Error(errorData.error?.message || `HTTP ${response.status}`);
@@ -63,10 +63,10 @@ export const speakWordLocal = (text: string): Promise<void> => {
 };
 
 /**
- * 方案 B: 智谱 GLM-TTS 云端语音合成
+ * 方案 B: 云端 AI-TTS 语音合成
  */
-export const speakWithGlmTTS = async (text: string): Promise<void> => {
-  const response = await fetch(GLM_TTS_ENDPOINT, {
+export const speakWithAiTTS = async (text: string): Promise<void> => {
+  const response = await fetch(AI_TTS_ENDPOINT, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${process.env.API_KEY}`,
@@ -84,7 +84,7 @@ export const speakWithGlmTTS = async (text: string): Promise<void> => {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `TTS 请求失败: ${response.status}`);
+    throw new Error(errorData.error?.message || `AI 语音请求失败: ${response.status}`);
   }
 
   const blob = await response.blob();
@@ -104,37 +104,40 @@ export const speakWithGlmTTS = async (text: string): Promise<void> => {
   });
 };
 
+// 保持旧名称兼容性但逻辑内部使用 AI 描述
+export const speakWithGlmTTS = speakWithAiTTS;
+
 /**
  * 智能检测当前环境下首选的 TTS 引擎
  */
-export const getPreferredTTSEngine = (): 'Web Speech' | 'GLM-TTS' => {
+export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
   const hasLocal = !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
-  return hasLocal ? 'Web Speech' : 'GLM-TTS';
+  return hasLocal ? 'Web Speech' : 'AI-TTS';
 };
 
 /**
  * 统一调度：优先本地，不可用或失败时自动尝试云端
  * 返回最终使用的引擎名称
  */
-export const speakWord = async (text: string): Promise<'Web Speech' | 'GLM-TTS'> => {
+export const speakWord = async (text: string): Promise<'Web Speech' | 'AI-TTS'> => {
   try {
     await speakWordLocal(text);
     return 'Web Speech';
   } catch (error) {
     if (process.env.API_KEY) {
-      await speakWithGlmTTS(text);
-      return 'GLM-TTS';
+      await speakWithAiTTS(text);
+      return 'AI-TTS';
     }
     throw error;
   }
 };
 
 /**
- * OCR 图像单词提取 (保留 GLM Vision 能力)
+ * OCR 图像单词提取 (使用 AI 视觉能力)
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {
-    const response = await fetch(GLM_ENDPOINT, {
+    const response = await fetch(AI_ENDPOINT, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.API_KEY}`,
