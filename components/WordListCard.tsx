@@ -2,6 +2,7 @@
 import React from 'react';
 import { WordList } from '../types';
 import { Edit3, Trash2, Play, Hash } from 'lucide-react';
+import { unlockAudioContext } from '../services/geminiService';
 
 interface WordListCardProps {
   list: WordList;
@@ -15,6 +16,12 @@ const WordListCard: React.FC<WordListCardProps> = ({ list, onEdit, onDelete, onS
     month: 'short',
     day: 'numeric'
   });
+
+  const handleStartStudy = () => {
+    // 关键：在用户点击手势内立即解锁音频通道
+    unlockAudioContext();
+    onSelect(list.id);
+  };
 
   return (
     <div className="group relative bg-white/60 backdrop-blur-md rounded-[3rem] border border-white p-8 shadow-xl shadow-indigo-100/30 hover:shadow-2xl hover:shadow-indigo-200/40 hover:-translate-y-3 transition-all duration-500 flex flex-col h-full overflow-hidden">
@@ -51,7 +58,7 @@ const WordListCard: React.FC<WordListCardProps> = ({ list, onEdit, onDelete, onS
 
       <div className="flex items-center gap-4 relative">
         <button 
-          onClick={() => onSelect(list.id)}
+          onClick={handleStartStudy}
           className="flex-1 bg-slate-900 group-hover:bg-indigo-600 text-white font-black py-4 rounded-[1.5rem] transition-all flex items-center justify-center gap-3 shadow-xl shadow-slate-200 group-hover:shadow-indigo-200 hover:scale-[1.05] active:scale-95"
         >
           <Play className="w-4 h-4 fill-current" />

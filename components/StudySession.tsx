@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
-import { speakWord, getPreferredTTSEngine } from '../services/geminiService';
-import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, Cpu, Zap } from 'lucide-react';
+import { speakWord, getPreferredTTSEngine, unlockAudioContext } from '../services/geminiService';
+import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, Cpu, Zap, AlertTriangle } from 'lucide-react';
 
 interface StudySessionProps {
   list: WordList;
@@ -15,6 +15,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWordVisible, setIsWordVisible] = useState(false);
   const [activeEngine, setActiveEngine] = useState<string>('Detecting...');
+  const [hasError, setHasError] = useState(false);
   
   const isComponentMounted = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -22,7 +23,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const stopAllAudio = useCallback(() => {
-    window.speechSynthesis.cancel();
+    window.speechSynthesis?.cancel();
     if (abortControllerRef.current) abortControllerRef.current.abort();
     setIsPlaying(false);
   }, []);
@@ -30,7 +31,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   useEffect(() => {
     isComponentMounted.current = true;
     setShuffledWords([...list.words].sort(() => Math.random() - 0.5));
-    // 初始引擎检测
     setActiveEngine(getPreferredTTSEngine());
     
     return () => {
@@ -41,29 +41,46 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
 
   const startSequence = useCallback(async () => {
     if (!shuffledWords[currentIndex]) return;
+    
     stopAllAudio();
+    setHasError(false);
+    
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setIsPlaying(true);
     
     try {
+      // 循环播放 3 次
       for (let i = 0; i < 3; i++) {
         if (controller.signal.aborted || !isComponentMounted.current) break;
+        
         const usedEngine = await speakWord(shuffledWords[currentIndex]);
-        // 如果在播放过程中发现实际使用的引擎与预想不符，则更新 UI
         if (usedEngine !== activeEngine) setActiveEngine(usedEngine);
         
-        if (i < 2 && !controller.signal.aborted && isComponentMounted.current) await delay(1200);
+        if (i < 2 && !controller.signal.aborted && isComponentMounted.current) {
+          await delay(1500); // 增加间隔，更适合学习
+        }
       }
     } catch (err) {
-      console.error("Playback failed", err);
+      console.error("Playback interrupted or blocked:", err);
+      if (isComponentMounted.current) setHasError(true);
     } finally {
-      if (!controller.signal.aborted && isComponentMounted.current) setIsPlaying(false);
+      if (!controller.signal.aborted && isComponentMounted.current) {
+        setIsPlaying(false);
+      }
     }
   }, [shuffledWords, currentIndex, stopAllAudio, activeEngine]);
 
+  // 处理微信/移动端自动播放失败后的手动激活
+  const handleManualPlay = () => {
+    unlockAudioContext();
+    startSequence();
+  };
+
   useEffect(() => {
-    if (shuffledWords.length > 0) startSequence();
+    if (shuffledWords.length > 0) {
+      startSequence();
+    }
   }, [currentIndex, shuffledWords, startSequence]);
 
   const handleNext = () => {
@@ -103,7 +120,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center py-12">
-          <div className={`w-full aspect-[16/10] rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.02] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''}`}>
+          <div className={`w-full aspect-[16/10] rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.02] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''} ${hasError ? 'border-amber-500/40' : ''}`}>
             
             {/* 引擎状态指示 */}
             <div className="absolute top-8 flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/5">
@@ -114,7 +131,13 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
             </div>
 
             <div className="relative text-center w-full h-48 flex flex-col items-center justify-center">
-              {isWordVisible ? (
+              {hasError ? (
+                <div className="flex flex-col items-center space-y-4 text-amber-400">
+                  <AlertTriangle className="w-12 h-12" />
+                  <p className="text-sm font-black uppercase tracking-widest">播放被浏览器拦截</p>
+                  <button onClick={handleManualPlay} className="px-6 py-2 bg-amber-500 text-slate-900 rounded-full text-[10px] font-black">点击此处恢复</button>
+                </div>
+              ) : isWordVisible ? (
                 <h1 className="text-6xl sm:text-8xl font-black tracking-tighter text-white animate-in fade-in zoom-in-90 duration-500 break-all px-4 drop-shadow-2xl">
                   {shuffledWords[currentIndex]}
                 </h1>
@@ -147,7 +170,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
               <SkipBack className="w-8 h-8 fill-current" />
             </button>
 
-            <button onClick={startSequence} className={`w-28 h-28 rounded-[2.5rem] flex items-center justify-center transition-all duration-500 shadow-2xl active:scale-90 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/50' : 'bg-white text-slate-950 hover:scale-110'}`}>
+            <button onClick={handleManualPlay} className={`w-28 h-28 rounded-[2.5rem] flex items-center justify-center transition-all duration-500 shadow-2xl active:scale-90 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/50' : 'bg-white text-slate-950 hover:scale-110'}`}>
               {isPlaying ? (
                 <div className="flex items-center space-x-1.5">
                   <div className="w-2 h-8 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
@@ -171,7 +194,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
             <div className="flex justify-between mt-4 items-center">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">听写进度</span>
               
-              {/* 引擎名称展示 - 细小的灰色提示词 */}
               <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] flex items-center gap-2">
                 当前驱动: <span className={activeEngine === 'AI-TTS' ? 'text-indigo-400/40' : 'text-emerald-400/40'}>{activeEngine}</span>
               </span>
