@@ -1,237 +1,141 @@
 
-import { GoogleGenAI, Modality } from "@google/genai";
-
 /**
- * LingoEcho 服务模块
- * 已深度适配微信/移动端：支持本地、智谱 AI、Gemini AI 三种语音驱动自动回退
+ * GLM API 服务模块
+ * 切换至智谱 AI GLM-4.6v-flash 模型
  */
 
-const getApiKey = () => {
+const GLM_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+const MODEL_NAME = 'glm-4.6v-flash';
+
+/**
+ * 验证 API 连通性
+ */
+export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
+  const start = Date.now();
   try {
-    return (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-  } catch (e) {
-    return '';
-  }
-};
-
-const apiKey = getApiKey();
-const ai = new GoogleGenAI({ apiKey: apiKey });
-
-// 全局 AudioContext 缓存
-let sharedAudioCtx: AudioContext | null = null;
-
-const getAudioContext = () => {
-  if (!sharedAudioCtx) {
-    sharedAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-  }
-  return sharedAudioCtx;
-};
-
-/**
- * 基础 Base64 解码工具
- */
-function decodeBase64(base64: string) {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
-
-/**
- * 解码 PCM 16bit 数据 (用于 Gemini TTS)
- */
-async function decodePcmData(
-  data: Uint8Array,
-  ctx: AudioContext,
-  sampleRate: number,
-  numChannels: number,
-): Promise<AudioBuffer> {
-  const dataInt16 = new Int16Array(data.buffer);
-  const frameCount = dataInt16.length / numChannels;
-  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-
-  for (let channel = 0; channel < numChannels; channel++) {
-    const channelData = buffer.getChannelData(channel);
-    for (let i = 0; i < frameCount; i++) {
-      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-    }
-  }
-  return buffer;
-}
-
-/**
- * 方案 1: 智谱 AI 云端语音合成 (GLM-TTS)
- */
-export async function speakWithZhipuTTS(text: string): Promise<void> {
-  const currentKey = getApiKey();
-  if (!currentKey) throw new Error("API Key Missing");
-
-  const response = await fetch("https://open.bigmodel.cn/api/paas/v4/audio/speech", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${currentKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "glm-tts",
-      input: text,
-      voice: "female",
-      speed: 1.0,
-      volume: 1.0,
-      response_format: "wav"
-    })
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `智谱错误: ${response.status}`);
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  const ctx = getAudioContext();
-  if (ctx.state === 'suspended') await ctx.resume();
-
-  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-  const source = ctx.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(ctx.destination);
-  
-  return new Promise((resolve) => {
-    source.onended = () => resolve();
-    source.start();
-  });
-}
-
-/**
- * 方案 2: Gemini 2.5 原生云端语音合成
- * 此方案与当前的 process.env.API_KEY 完美兼容
- */
-export async function speakWithGeminiTTS(text: string): Promise<void> {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: text }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
-          },
-        },
+    const response = await fetch(GLM_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.API_KEY}`,
+        'Content-Type': 'application/json'
       },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 10
+      })
     });
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("Gemini TTS 空响应");
-
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') await ctx.resume();
-
-    const audioBuffer = await decodePcmData(decodeBase64(base64Audio), ctx, 24000, 1);
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(ctx.destination);
-    
-    return new Promise((resolve) => {
-      source.onended = () => resolve();
-      source.start();
-    });
-  } catch (error) {
-    console.error("Gemini TTS Failed:", error);
-    throw error;
+    const latency = Date.now() - start;
+    if (response.ok) {
+      return { success: true, message: "GLM API 连接成功，模型响应正常", latency };
+    }
+    const errorData = await response.json();
+    throw new Error(errorData.error?.message || `HTTP 错误 ${response.status}`);
+  } catch (error: any) {
+    return { success: false, message: error.message || "未知错误", latency: Date.now() - start };
   }
-}
+};
 
 /**
- * 方案 3: 本地浏览器语音驱动
+ * 内部清洗逻辑：从模型输出中提取纯净单词
  */
-export const speakWordLocal = async (text: string): Promise<void> => {
-  if (typeof window === 'undefined' || !window.speechSynthesis) {
-    throw new Error("浏览器不支持本地语音");
-  }
+export const cleanOcrOutput = (rawText: string): string[] => {
+  return rawText.split('\n')
+    .map(w => w.trim())
+    .filter(w => {
+      if (!w) return false;
+      // 过滤纯数字
+      if (/^\d+$/.test(w)) return false;
+      // 过滤页码类文字
+      if (/^p\d+$/i.test(w) || /^page\s*\d+$/i.test(w)) return false;
+      
+      const noiseKeywords = [
+        'section', 'part', 'chapter', 'based on', 
+        'here are', 'vocabulary', '词语表', '页', 'page',
+        '**', '...', '---', ':', 'list'
+      ];
+      const lowercaseW = w.toLowerCase();
+      const isNoise = noiseKeywords.some(key => lowercaseW.includes(key));
+      const isJustSymbols = /^[^a-zA-Z\u4e00-\u9fa5]+$/.test(w);
+      
+      return !isNoise && !isJustSymbols;
+    })
+    .map(w => w.replace(/[\*\-_]/g, '').trim());
+};
 
-  return new Promise((resolve, reject) => {
+/**
+ * 使用 GLM-4.6v-flash 视觉能力提取图片中的单词。
+ */
+export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
+  try {
+    const response = await fetch(GLM_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64Data}`
+                }
+              },
+              {
+                type: "text",
+                text: `URGENT: OCR EXTRACTION TASK.
+                Extract only the literal words and phrases from this image. 
+                
+                FORBIDDEN ELEMENTS:
+                - NO introductory or concluding sentences.
+                - NO "Section X" or "Group Y" headers.
+                - NO standalone numbers or page counts.
+                - NO punctuation or formatting symbols.
+                
+                OUTPUT FORMAT:
+                Just the words, one per line. Pure text only.`
+              }
+            ]
+          }
+        ],
+        thinking: {
+          type: "enabled"
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || "网络请求失败");
+    }
+
+    const data = await response.json();
+    const rawText = data.choices[0]?.message?.content || "";
+    const cleaned = cleanOcrOutput(rawText);
+
+    if (returnRaw) {
+      return { raw: rawText, cleaned };
+    }
+    return cleaned;
+  } catch (error: any) {
+    console.error("GLM Vision Error:", error);
+    throw new Error(error.message || "图像解析失败，请检查 API 配置");
+  }
+};
+
+export const speakWord = (text: string): Promise<void> => {
+  return new Promise((resolve) => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
-    utterance.rate = 0.9;
+    utterance.rate = 0.85;
     utterance.onend = () => resolve();
-    utterance.onerror = (e) => reject(new Error(`本地错误: ${e.error}`));
     window.speechSynthesis.speak(utterance);
-    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
   });
-};
-
-/**
- * 统一调度中心：三级回退逻辑
- */
-export const speakWord = async (text: string): Promise<void> => {
-  // 1. 尝试本地
-  try {
-    const supportsLocal = window.speechSynthesis && window.speechSynthesis.getVoices().length > 0;
-    if (supportsLocal) {
-      await speakWordLocal(text);
-      return;
-    }
-  } catch (e) {
-    console.warn("Local TTS skipped");
-  }
-
-  // 2. 尝试智谱 (用户首选)
-  try {
-    await speakWithZhipuTTS(text);
-    return;
-  } catch (e: any) {
-    console.error("Zhipu AI Failed, trying Gemini Fallback...", e.message);
-    // 3. 最终保底：Gemini TTS (必成方案)
-    await speakWithGeminiTTS(text);
-  }
-};
-
-/**
- * 音频解锁
- */
-export const unlockAudio = (): void => {
-  if (typeof window !== 'undefined') {
-    if (window.speechSynthesis) {
-      const silent = new SpeechSynthesisUtterance(" ");
-      silent.volume = 0;
-      window.speechSynthesis.speak(silent);
-    }
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-  }
-};
-
-export const testGeminiConnectivity = async () => {
-  const start = Date.now();
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: 'ping',
-    });
-    return { success: true, message: "Gemini API 连接正常", latency: Date.now() - start };
-  } catch (error: any) {
-    return { success: false, message: error.message || "连接失败", latency: Date.now() - start };
-  }
-};
-
-export const extractWordsFromImage = async (base64Data: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: {
-        parts: [
-          { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
-          { text: "Extract words, one per line." }
-        ]
-      }
-    });
-    return (response.text || "").split('\n').map(w => w.trim()).filter(w => w && !/^\d+$/.test(w));
-  } catch (error: any) {
-    throw new Error(error.message || "图像解析失败");
-  }
 };

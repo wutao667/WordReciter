@@ -7,16 +7,6 @@ import DebugConsole from './components/DebugConsole';
 import { extractWordsFromImage } from './services/geminiService';
 import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon } from 'lucide-react';
 
-// 兼容性 ID 生成器，解决微信/低版本浏览器不支持 crypto.randomUUID 的问题
-const generateId = () => {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-  } catch (e) {}
-  return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-};
-
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,7 +30,7 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   useEffect(() => {
     if (isDebugOpen && recognitionRef.current) {
@@ -184,7 +174,7 @@ const App: React.FC = () => {
             return prev.trim() ? `${prev}\n${newContent}` : newContent;
           });
         } else {
-          setErrorMsg("未在图片中检测到单词，请检查 API 设置");
+          setErrorMsg("未在图片中检测到单词");
         }
         setIsAnalyzing(false);
       };
@@ -217,7 +207,7 @@ const App: React.FC = () => {
     if (editingList) {
       setLists(prev => prev.map(l => l.id === editingList.id ? { ...l, name: finalName, words } : l));
     } else {
-      setLists(prev => [{ id: generateId(), name: finalName, words, createdAt: Date.now() }, ...prev]);
+      setLists(prev => [{ id: crypto.randomUUID(), name: finalName, words, createdAt: Date.now() }, ...prev]);
     }
     setIsModalOpen(false);
     stopListening();
@@ -238,18 +228,8 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-3">
-            <button 
-              onClick={() => setIsDebugOpen(true)} 
-              className="bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-500 p-3 rounded-2xl transition-all group relative"
-              title="系统诊断"
-            >
-              <Bug className="w-4 h-4" />
-              <span className="absolute -bottom-8 right-0 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">系统诊断面板</span>
-            </button>
-            <button onClick={() => handleOpenModal()} className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-xl flex items-center gap-2 text-sm">
-              <Plus className="w-4 h-4 stroke-[3px]" />
-              <span>新建词单</span>
-            </button>
+            <button onClick={() => setIsDebugOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-500 p-3 rounded-2xl transition-all"><Bug className="w-4 h-4" /></button>
+            <button onClick={() => handleOpenModal()} className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-xl flex items-center gap-2 text-sm"><Plus className="w-4 h-4 stroke-[3px]" /><span>新建词单</span></button>
           </div>
         </div>
       </nav>
