@@ -9,8 +9,8 @@ const AI_TTS_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/audio/speech';
 const MODEL_NAME = 'glm-4.6v-flash';
 
 // Azure TTS 配置
-// 注意：Azure TTS 需要 API Key 和对应的区域代码（如 eastasia, eastus 等）
-const AZURE_REGION = 'eastasia'; 
+// 允许通过环境变量 AZURE_REGION 自定义区域，默认为美国东部 (eastus)
+export const AZURE_REGION = process.env.AZURE_REGION || 'eastus'; 
 const AZURE_TTS_ENDPOINT = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
 
 // 环境检测常量
@@ -226,6 +226,9 @@ export const speakWithAzureTTS = async (text: string, signal?: AbortSignal): Pro
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("401 Unauthorized: API Key 错误或与 Region 不匹配 (当前: " + AZURE_REGION + ")");
+      }
       const errorText = await response.text();
       throw new Error(`Azure TTS 错误: ${response.status} ${errorText}`);
     }

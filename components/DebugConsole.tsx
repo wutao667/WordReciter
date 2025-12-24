@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, Trash2, Zap, Globe, Volume2, PlayCircle, Loader2, Sparkles, AlertCircle, Info, Languages, Monitor, Smartphone, MessageSquare, Terminal, Copy, CheckCircle2, Cloud } from 'lucide-react';
-import { testGeminiConnectivity, speakWithAiTTS, speakWordLocal, speakWithAzureTTS } from '../services/geminiService';
+import { X, ShieldCheck, Trash2, Zap, Globe, Volume2, PlayCircle, Loader2, Sparkles, AlertCircle, Info, Languages, Monitor, Smartphone, MessageSquare, Terminal, Copy, CheckCircle2, Cloud, MapPin } from 'lucide-react';
+import { testGeminiConnectivity, speakWithAiTTS, speakWordLocal, speakWithAzureTTS, AZURE_REGION } from '../services/geminiService';
 
 interface DebugConsoleProps {
   onClose: () => void;
@@ -73,6 +73,9 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
       addLog('success', `${mode.toUpperCase()} 播报成功`);
     } catch (err: any) {
       addLog('error', `${mode.toUpperCase()} 播报失败: ${err.message}`);
+      if (mode === 'azure' && err.message.includes('401')) {
+        addLog('warn', '提示：401 错误通常意味着您的 AZURE_API_KEY 与区域 (' + AZURE_REGION + ') 不匹配。请检查环境变量。');
+      }
     } finally {
       setIsTestingTTS(false);
     }
@@ -196,14 +199,18 @@ UA: ${envInfo.userAgent}
                       </button>
                     </div>
 
-                    {/* Azure 引擎 - 新增 */}
+                    {/* Azure 引擎 */}
                     <div className="bg-white p-5 rounded-2xl border border-sky-50 shadow-sm space-y-4">
                       <div className="flex justify-between items-start">
                         <div className="px-2 py-1 bg-sky-50 text-sky-600 text-[10px] font-black rounded-md uppercase">Azure-TTS</div>
                         <Cloud className="w-4 h-4 text-sky-500" />
                       </div>
                       <h4 className="font-black text-xs text-slate-800">Azure 神经网络</h4>
-                      <p className="text-[10px] text-slate-500 leading-relaxed">业内顶级音质，细腻如真人。需配置 Key。</p>
+                      <div className="flex items-center gap-1.5 text-[9px] font-black text-sky-600 bg-sky-50 px-2 py-0.5 rounded-md w-fit">
+                        <MapPin className="w-2.5 h-2.5" />
+                        REGION: {AZURE_REGION}
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">业内顶级音质。若 401 请检查 Key 与 Region 匹配度。</p>
                       <button 
                         onClick={() => testTTS('azure')}
                         disabled={isTestingTTS}
@@ -217,7 +224,7 @@ UA: ${envInfo.userAgent}
                   <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3 items-start">
                     <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                     <div className="text-[10px] text-amber-800 font-bold leading-relaxed">
-                      配置说明：Azure TTS 需要在环境变量中设置 <code className="bg-amber-100 px-1 rounded">AZURE_API_KEY</code>。如果“运行测试”报错，请检查您的 Key 是否有效及区域配置是否匹配。
+                      配置说明：需在环境变量中设置 <code className="bg-amber-100 px-1 rounded">AZURE_API_KEY</code>。如果您的资源不在 eastasia，请额外配置 <code className="bg-amber-100 px-1 rounded">AZURE_REGION</code>。
                     </div>
                   </div>
                 </div>
