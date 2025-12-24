@@ -164,10 +164,14 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const extractedWords = await extractWordsFromImage(base64);
-        if (extractedWords.length > 0) {
+        const extractedResult = await extractWordsFromImage(base64);
+        
+        // Handle the union return type from extractWordsFromImage
+        const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
+
+        if (words.length > 0) {
           setWordsInput(prev => {
-            const newContent = extractedWords.join('\n');
+            const newContent = words.join('\n');
             return prev.trim() ? `${prev}\n${newContent}` : newContent;
           });
         } else {
