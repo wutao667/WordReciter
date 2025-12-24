@@ -21,7 +21,7 @@ LingoEcho 是一款专为高效记忆单词设计的极简 Web 应用。它结�
 - **Variable Name**: `AZURE_API_KEY`
 - **Value**: 获取自 Azure 认知服务。
 - **Variable Name**: `AZURE_REGION` (可选)
-- **Value**: 默认 `eastus`，需与您的 Key 区域一致。
+- **Value**: 默认 `eastasia`，需与您的 Key 区域一致。
 
 ## 🚀 部署与使用
 

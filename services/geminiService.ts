@@ -9,8 +9,8 @@ const AI_TTS_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/audio/speech';
 const MODEL_NAME = 'glm-4.6v-flash';
 
 // Azure TTS 配置
-// 允许通过环境变量 AZURE_REGION 自定义区域，默认为美国东部 (eastus)
-export const AZURE_REGION = process.env.AZURE_REGION || 'eastus'; 
+// 允许通过环境变量 AZURE_REGION 自定义区域，默认为东亚 (eastasia)
+export const AZURE_REGION = process.env.AZURE_REGION || 'eastasia'; 
 const AZURE_TTS_ENDPOINT = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
 
 // 环境检测常量
