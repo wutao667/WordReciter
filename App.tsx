@@ -251,67 +251,99 @@ const App: React.FC = () => {
       {isDebugOpen && <DebugConsole onClose={() => setIsDebugOpen(false)} />}
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/20 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-3xl border overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="px-10 py-8 border-b flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">词单配置</h2>
-              <button onClick={() => { setIsModalOpen(false); stopListening(); }} className="text-slate-300 hover:text-red-500 transition-colors">
-                <Plus className="w-8 h-8 rotate-45" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/25 backdrop-blur-md animate-in fade-in duration-300 overflow-hidden">
+          <div className="bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl w-full max-w-4xl border overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[95vh]">
+            
+            {/* Header - 紧凑化 */}
+            <div className="px-6 py-4 sm:px-10 sm:py-6 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">词单配置</h2>
+              <button onClick={() => { setIsModalOpen(false); stopListening(); }} className="text-slate-300 hover:text-red-500 transition-colors p-2">
+                <Plus className="w-6 h-6 sm:w-8 sm:h-8 rotate-45" />
               </button>
             </div>
             
-            <form onSubmit={handleSaveList} className="p-10 space-y-8">
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">词单标题</label>
-                <input value={listName} onChange={e => setListName(e.target.value)} placeholder="例如：GRE核心词汇、日常口语..." className="w-full px-8 py-5 rounded-2xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all shadow-inner" />
-              </div>
-              
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {!isMobile && (
-                    <>
-                      <button type="button" onClick={() => toggleListening('en-US')} className={`px-5 py-3 rounded-full text-xs font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}><Mic className="w-4 h-4" /> 听写英文</button>
-                      <button type="button" onClick={() => toggleListening('zh-CN')} className={`px-5 py-3 rounded-full text-xs font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}><Mic className="w-4 h-4" /> 听写中文</button>
-                    </>
-                  )}
-                  <button type="button" onClick={() => cameraInputRef.current?.click()} className="px-5 py-3 rounded-full text-xs font-black bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all flex items-center gap-2"><Camera className="w-4 h-4" /> 拍照识词</button>
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="px-5 py-3 rounded-full text-xs font-black bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-2"><ImageIcon className="w-4 h-4" /> 从相册选择</button>
+            {/* Form Content - 启用响应式分栏与内部滚动 */}
+            <form onSubmit={handleSaveList} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-6 sm:p-10 custom-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
                   
-                  <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
-                  <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} />
-                </div>
-
-                <div className="relative group">
-                  <label className="absolute -top-3 left-6 px-2 bg-white text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] z-10">单词列表</label>
-                  <textarea required value={wordsInput} onChange={e => setWordsInput(e.target.value)} rows={6} placeholder="输入单词，每行一个。例如：&#10;Abundant&#10;Brilliant&#10;Creative" className="w-full px-8 py-6 rounded-3xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all resize-none shadow-inner leading-relaxed" />
-                  
-                  {isAnalyzing && (
-                    <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center gap-4 animate-in fade-in duration-300 z-20">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse" />
-                        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin relative" />
-                      </div>
-                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest animate-pulse">AI 视觉分析中...</span>
+                  {/* 左侧栏：基本信息与录入功能 */}
+                  <div className="space-y-6 sm:space-y-8">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">词单标题</label>
+                      <input 
+                        value={listName} 
+                        onChange={e => setListName(e.target.value)} 
+                        placeholder="例如：GRE核心词汇..." 
+                        className="w-full px-6 py-4 sm:py-5 rounded-2xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all shadow-inner" 
+                      />
                     </div>
-                  )}
 
-                  {isListening && (
-                    <div className="absolute bottom-4 left-4 right-4 p-5 bg-indigo-600 text-white rounded-2xl shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-2 h-2 bg-red-400 rounded-full animate-ping" />
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-80">语音实时转录中</span>
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">快速录入工具</label>
+                      <div className="flex flex-wrap gap-2">
+                        {!isMobile && (
+                          <>
+                            <button type="button" onClick={() => toggleListening('en-US')} className={`px-4 py-3 rounded-full text-[10px] font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}><Mic className="w-3.5 h-3.5" /> 英文听写</button>
+                            <button type="button" onClick={() => toggleListening('zh-CN')} className={`px-4 py-3 rounded-full text-[10px] font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}><Mic className="w-3.5 h-3.5" /> 中文听写</button>
+                          </>
+                        )}
+                        <button type="button" onClick={() => cameraInputRef.current?.click()} className="px-4 py-3 rounded-full text-[10px] font-black bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all flex items-center gap-2"><Camera className="w-3.5 h-3.5" /> 拍照识词</button>
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-3 rounded-full text-[10px] font-black bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-2"><ImageIcon className="w-3.5 h-3.5" /> 相册选择</button>
+                        
+                        <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                        <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} />
                       </div>
-                      <p className="text-sm italic font-medium leading-relaxed">{interimText || "请清晰说出单词..."}</p>
+                      
+                      {isListening && (
+                        <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl animate-in slide-in-from-bottom-2 duration-300">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
+                            <span className="text-[9px] font-black uppercase tracking-widest opacity-80">正在倾听...</span>
+                          </div>
+                          <p className="text-xs italic font-medium truncate">{interimText || "请说话..."}</p>
+                        </div>
+                      )}
+
+                      {errorMsg && (
+                        <div className="flex items-center gap-2 text-red-500 text-[10px] font-bold px-4 py-3 bg-red-50 rounded-xl animate-shake">
+                          <AlertCircle className="w-3.5 h-3.5" /> {errorMsg}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  {/* 右侧栏：单词列表 */}
+                  <div className="flex flex-col h-full space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">单词明细 (每行一个)</label>
+                    <div className="relative flex-1 group min-h-[160px] md:min-h-0">
+                      <textarea 
+                        required 
+                        value={wordsInput} 
+                        onChange={e => setWordsInput(e.target.value)} 
+                        placeholder="Abundant&#10;Brilliant&#10;Creative" 
+                        className="w-full h-full min-h-[200px] md:min-h-full px-6 py-6 rounded-3xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all resize-none shadow-inner leading-relaxed" 
+                      />
+                      
+                      {isAnalyzing && (
+                        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center gap-3 animate-in fade-in duration-300 z-20">
+                          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                          <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest animate-pulse">AI 分析中...</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                
-                {errorMsg && <div className="flex items-center gap-2 text-red-500 text-xs font-bold px-4 py-2 bg-red-50 rounded-xl animate-shake"><AlertCircle className="w-4 h-4" /> {errorMsg}</div>}
               </div>
 
-              <div className="flex gap-4">
-                <button type="submit" disabled={isAnalyzing} className="flex-1 py-5 bg-slate-900 hover:bg-indigo-600 disabled:bg-slate-300 text-white font-black rounded-[1.5rem] shadow-xl shadow-indigo-100 transition-all active:scale-[0.98] uppercase tracking-[0.2em] text-sm">
-                  {editingList ? '更新词单' : '立即创建'}
+              {/* Footer - 始终固定在底部 */}
+              <div className="px-6 py-4 sm:px-10 sm:py-6 bg-slate-50 border-t shrink-0">
+                <button 
+                  type="submit" 
+                  disabled={isAnalyzing} 
+                  className="w-full py-4 sm:py-5 bg-slate-900 hover:bg-indigo-600 disabled:bg-slate-300 text-white font-black rounded-2xl shadow-xl transition-all active:scale-[0.98] uppercase tracking-[0.2em] text-xs sm:text-sm"
+                >
+                  {editingList ? '更新词单内容' : '立即创建词单'}
                 </button>
               </div>
             </form>
