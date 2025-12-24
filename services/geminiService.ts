@@ -51,7 +51,7 @@ export const speakWordLocal = (text: string): Promise<void> => {
       reject(new Error("不支持本地语音"));
       return;
     }
-    // 微信中本地语音极不稳定，通常只有 API 壳子但没声音
+    // 微信中本地语音极不稳定
     if (isWechat) {
       reject(new Error("微信环境建议使用 AI 引擎"));
       return;
@@ -101,7 +101,6 @@ export const speakWithAiTTS = async (text: string): Promise<void> => {
   const audio = new Audio(url);
 
   return new Promise((resolve, reject) => {
-    // 关键：在播放前手动尝试 play() 捕获异常
     const playPromise = audio.play();
     
     if (playPromise !== undefined) {
@@ -124,28 +123,26 @@ export const speakWithAiTTS = async (text: string): Promise<void> => {
 };
 
 /**
- * 播报系统预热（Unlock）：在用户点击按钮时调用，解决移动端自动播放限制
+ * 播报系统预热（Unlock）：
+ * 优化：使用完全静默且长度适中的标准 WAV，移除可能导致系统提示音的 TTS 预热。
  */
 export const unlockAudioContext = () => {
-  // 解锁本地 TTS
-  if (window.speechSynthesis) {
-    const silent = new SpeechSynthesisUtterance(" ");
-    silent.volume = 0;
-    window.speechSynthesis.speak(silent);
+  try {
+    const silentAudio = new Audio();
+    // 一个标准的 100ms 采样率 8k 的单声道静默 WAV 文件
+    silentAudio.src = "data:audio/wav;base64,UklGRjIAAABXQVZFMmZtdCAAAAABAAEAQB8AAEAfAAABAAgAAABkYXRhAAAAAAGHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg==";
+    silentAudio.volume = 0; // 即使是静默数据也将音量设为0
+    silentAudio.play().catch(() => {});
+  } catch (e) {
+    console.debug("Unlock failed", e);
   }
-  // 解锁 HTML5 Audio
-  const silentAudio = new Audio();
-  silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFMmZtdCAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
-  silentAudio.play().catch(() => {});
 };
 
 /**
  * 智能检测当前环境下首选的 TTS 引擎
  */
 export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
-  // 微信环境强制使用 AI-TTS，因为本地 Web Speech 在微信中通常无效
   if (isWechat) return 'AI-TTS';
-  
   const hasLocal = !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
   return hasLocal ? 'Web Speech' : 'AI-TTS';
 };
@@ -165,7 +162,6 @@ export const speakWord = async (text: string): Promise<'Web Speech' | 'AI-TTS'> 
     await speakWordLocal(text);
     return 'Web Speech';
   } catch (error) {
-    console.warn("引擎回退...", error);
     if (process.env.API_KEY) {
       await speakWithAiTTS(text);
       return 'AI-TTS';
@@ -175,7 +171,7 @@ export const speakWord = async (text: string): Promise<'Web Speech' | 'AI-TTS'> 
 };
 
 /**
- * OCR 提取：优化提示词，仅保留英文和中文单词，剔除数字
+ * OCR 提取
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {
@@ -205,11 +201,10 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
     const data = await response.json();
     const rawText = data.choices[0]?.message?.content || "";
     
-    // 后处理：移除所有剩余数字，并过滤掉空行
     const words = rawText
       .split('\n')
-      .map((w: string) => w.replace(/[0-9]/g, '').trim()) // 移除所有数字字符
-      .filter((w: string) => w.length > 0); // 过滤掉因移除数字变成空行的内容
+      .map((w: string) => w.replace(/[0-9]/g, '').trim())
+      .filter((w: string) => w.length > 0);
 
     return returnRaw ? { raw: rawText, cleaned: words } : words;
   } catch (error: any) {
