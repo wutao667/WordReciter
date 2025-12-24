@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
-import { speakWord, stopAllSpeech } from '../services/geminiService';
-import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle } from 'lucide-react';
+import { speakWord, stopAllSpeech, getPreferredTTSEngine } from '../services/geminiService';
+import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cpu } from 'lucide-react';
 
 interface StudySessionProps {
   list: WordList;
@@ -15,6 +15,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWordVisible, setIsWordVisible] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [activeEngine, setActiveEngine] = useState<'Web Speech' | 'AI-TTS'>(getPreferredTTSEngine());
   
   const isComponentMounted = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -50,9 +51,12 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     setIsPlaying(true);
     
     try {
-      // 保持正式语气的重复逻辑
       const repeatedText = `${word}; ${word}; ${word}.`;
-      await speakWord(repeatedText, controller.signal);
+      const engineUsed = await speakWord(repeatedText, controller.signal);
+      
+      if (isComponentMounted.current) {
+        setActiveEngine(engineUsed);
+      }
       
     } catch (err: any) {
       if (err.message !== 'AbortError' && err.name !== 'AbortError') {
@@ -116,6 +120,24 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         <div className="flex-1 flex flex-col items-center justify-center py-12">
           <div className={`w-full aspect-[16/10] rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.02] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''} ${hasError ? 'border-amber-500/40' : ''}`}>
             
+            {/* 引擎状态指示器 - 移动至中央卡片内部 */}
+            <div className="absolute top-8 right-10">
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border backdrop-blur-md shadow-lg transition-all duration-500 ${activeEngine === 'Web Speech' ? 'border-emerald-500/20' : 'border-indigo-500/20'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${activeEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.6)]'}`} />
+                {activeEngine === 'Web Speech' ? (
+                   <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                   <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                )}
+                <div className="flex flex-col items-start leading-none">
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${activeEngine === 'Web Speech' ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                    {activeEngine === 'Web Speech' ? 'Offline' : 'AI Cloud'}
+                  </span>
+                  <span className="text-[6px] text-white/30 font-bold uppercase tracking-tighter mt-0.5">TTS Engine Active</span>
+                </div>
+              </div>
+            </div>
+
             <div className="relative text-center w-full h-48 flex flex-col items-center justify-center">
               {hasError ? (
                 <div className="flex flex-col items-center space-y-4 text-amber-400">
@@ -174,12 +196,13 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
           </div>
 
           <div className="px-6">
-            <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-              <div className="h-full bg-gradient-to-r from-indigo-500 via-indigo-400 to-indigo-600 transition-all duration-1000 ease-out" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="flex justify-between mt-4 items-center">
+            <div className="flex justify-between items-end mb-4">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">听写进度</span>
               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">已完成 {Math.round(progress)}%</span>
+            </div>
+
+            <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
+              <div className="h-full bg-gradient-to-r from-indigo-500 via-indigo-400 to-indigo-600 transition-all duration-1000 ease-out" style={{ width: `${progress}%` }} />
             </div>
           </div>
         </div>

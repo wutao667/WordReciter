@@ -196,22 +196,25 @@ export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
 /**
  * 统一调度：优先本地，自动回退到 AI
  */
-export const speakWord = async (text: string, signal?: AbortSignal): Promise<void> => {
+export const speakWord = async (text: string, signal?: AbortSignal): Promise<'Web Speech' | 'AI-TTS'> => {
   const preferred = getPreferredTTSEngine();
   
   // 如果首选是 AI（如微信环境），直接走 AI
   if (preferred === 'AI-TTS' && process.env.API_KEY) {
-    return await speakWithAiTTS(text, signal);
+    await speakWithAiTTS(text, signal);
+    return 'AI-TTS';
   }
 
   // 否则尝试本地，失败则尝试 AI
   try {
     await speakWordLocal(text, signal);
+    return 'Web Speech';
   } catch (error: any) {
     if (error.message === 'AbortError') throw error;
     // 本地失败且有 API Key，回退到 AI
     if (process.env.API_KEY) {
-      return await speakWithAiTTS(text, signal);
+      await speakWithAiTTS(text, signal);
+      return 'AI-TTS';
     }
     throw error;
   }
