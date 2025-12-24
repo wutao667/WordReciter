@@ -119,7 +119,7 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
         'Authorization': `Bearer ${process.env.API_KEY}`,
         'Content-Type': 'application/json'
       },
-      signal: signal, // 绑定信号到 fetch
+      signal: signal,
       body: JSON.stringify({
         model: "glm-tts",
         input: text,
@@ -186,20 +186,6 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
   }
 };
 
-/**
- * 播报系统预热
- */
-export const unlockAudioContext = () => {
-  try {
-    const silentAudio = new Audio();
-    silentAudio.src = "data:audio/wav;base64,UklGRjIAAABXQVZFMmZtdCAAAAABAAEAQB8AAEAfAAABAAgAAABkYXRhAAAAAAGHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg==";
-    silentAudio.volume = 0;
-    silentAudio.play().catch(() => {});
-  } catch (e) {
-    console.debug("Unlock failed", e);
-  }
-};
-
 export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
   if (isWechat) return 'AI-TTS';
   const hasLocal = !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
@@ -208,9 +194,6 @@ export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
 
 /**
  * 统一调度
- * @param text 要播报的文字
- * @param forceEngine 强制指定的引擎
- * @param signal 中断信号
  */
 export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-TTS', signal?: AbortSignal): Promise<'Web Speech' | 'AI-TTS'> => {
   if (forceEngine === 'AI-TTS') {
@@ -242,7 +225,7 @@ export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-T
 };
 
 /**
- * OCR 提取：剔除数字
+ * OCR 提取
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {

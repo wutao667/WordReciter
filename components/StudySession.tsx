@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
-import { speakWord, getPreferredTTSEngine, unlockAudioContext, stopAllSpeech } from '../services/geminiService';
+import { speakWord, getPreferredTTSEngine, stopAllSpeech } from '../services/geminiService';
 import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, Cpu, Zap, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface StudySessionProps {
@@ -52,7 +52,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     
     try {
       const repeatedText = `${word}。 ${word}。 ${word}`;
-      // 将 AbortSignal 传递给底层服务，确保真正可中断
       await speakWord(repeatedText, activeEngine, controller.signal);
       
     } catch (err: any) {
@@ -68,15 +67,13 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   }, [shuffledWords, currentIndex, stopPlayback, activeEngine]);
 
   const handleManualPlay = () => {
-    unlockAudioContext();
     startSequence();
   };
 
   const toggleEngine = () => {
     const nextEngine = activeEngine === 'Web Speech' ? 'AI-TTS' : 'Web Speech';
     setActiveEngine(nextEngine);
-    unlockAudioContext();
-    // 这里不需要 setTimeout，useEffect 会自动监测 activeEngine 的变化并调用 startSequence
+    // useEffect 会监测 activeEngine 变化并自动调用 startSequence
   };
 
   useEffect(() => {

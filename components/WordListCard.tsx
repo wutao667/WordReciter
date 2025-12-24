@@ -2,7 +2,6 @@
 import React from 'react';
 import { WordList } from '../types';
 import { Edit3, Trash2, Play, Hash } from 'lucide-react';
-import { unlockAudioContext } from '../services/geminiService';
 
 interface WordListCardProps {
   list: WordList;
@@ -18,8 +17,6 @@ const WordListCard: React.FC<WordListCardProps> = ({ list, onEdit, onDelete, onS
   });
 
   const handleStartStudy = () => {
-    // 关键：在用户点击手势内立即解锁音频通道
-    unlockAudioContext();
     onSelect(list.id);
   };
 
