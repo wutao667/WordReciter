@@ -183,7 +183,7 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
     if (signal?.aborted) throw new Error("AbortError");
     await playAudioBlob(blob, signal);
   } catch (err: any) {
-    if (err.name === 'AbortError' || err.message === 'AbortError') throw new Error("AbortError");
+    if (err.name='AbortError' || err.message === 'AbortError') throw new Error("AbortError");
     throw err;
   }
 };
@@ -258,25 +258,35 @@ export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
 };
 
 /**
- * 统一调度：优先尊重 forcedEngine，其次智能选择
+ * 统一调度：优先使用 Azure TTS 作为 AI-TTS 引擎
  */
 export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine?: 'Web Speech' | 'AI-TTS'): Promise<'Web Speech' | 'AI-TTS'> => {
   const engineToUse = forcedEngine || getPreferredTTSEngine();
   
-  if (engineToUse === 'AI-TTS' && process.env.GLM_API_KEY) {
-    await speakWithAiTTS(text, signal);
-    return 'AI-TTS';
+  if (engineToUse === 'AI-TTS') {
+    // 优先尝试 Azure
+    if (process.env.AZURE_API_KEY) {
+      try {
+        await speakWithAzureTTS(text, signal);
+        return 'AI-TTS';
+      } catch (err: any) {
+        if (err.message === 'AbortError') throw err;
+        console.warn("Azure TTS failed, falling back to GLM:", err);
+      }
+    }
+    // 备选 GLM
+    if (process.env.GLM_API_KEY) {
+      await speakWithAiTTS(text, signal);
+      return 'AI-TTS';
+    }
   }
 
+  // 最后保底方案：Web Speech
   try {
     await speakWordLocal(text, signal);
     return 'Web Speech';
   } catch (error: any) {
     if (error.message === 'AbortError') throw error;
-    if (process.env.GLM_API_KEY) {
-      await speakWithAiTTS(text, signal);
-      return 'AI-TTS';
-    }
     throw error;
   }
 };

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
 import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported } from '../services/geminiService';
-import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cpu, Lock } from 'lucide-react';
+import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cloud, Lock } from 'lucide-react';
 
 interface StudySessionProps {
   list: WordList;
@@ -56,7 +56,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     
     try {
       const repeatedText = `${word}; ${word}; ${word}.`;
-      // 传入用户选择的引擎
+      // 传入用户选择的引擎，内部会优先使用 Azure
       const engineUsed = await speakWord(repeatedText, controller.signal, selectedEngine);
       
       if (isComponentMounted.current) {
@@ -173,24 +173,24 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         <div className="space-y-4 md:space-y-12">
           
           <div className="relative flex flex-col items-center">
-            {/* 引擎状态切换器 - 升级为交互控件 */}
+            {/* 引擎状态切换器 */}
             <div className="mb-4 md:mb-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
               <button 
                 onClick={toggleEngine}
                 disabled={!localAvailable}
-                className={`group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full border backdrop-blur-md shadow-xl transition-all duration-500 active:scale-95 ${!localAvailable ? 'bg-slate-900/50 border-white/5 opacity-80' : 'bg-white/5 hover:bg-white/10 cursor-pointer'} ${selectedEngine === 'Web Speech' ? 'border-emerald-500/30' : 'border-indigo-500/30'}`}
+                className={`group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full border backdrop-blur-md shadow-xl transition-all duration-500 active:scale-95 ${!localAvailable ? 'bg-slate-900/50 border-white/5 opacity-80' : 'bg-white/5 hover:bg-white/10 cursor-pointer'} ${selectedEngine === 'Web Speech' ? 'border-emerald-500/30' : 'border-sky-500/30'}`}
               >
-                <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full animate-pulse ${selectedEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.6)]'}`} />
+                <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full animate-pulse ${selectedEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.6)]'}`} />
                 
                 {selectedEngine === 'Web Speech' ? (
                    <Zap className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-400" />
                 ) : (
-                   <Cpu className="w-3 h-3 md:w-3.5 md:h-3.5 text-indigo-400" />
+                   <Cloud className="w-3 h-3 md:w-3.5 md:h-3.5 text-sky-400" />
                 )}
 
                 <div className="flex flex-col items-start leading-none">
-                  <span className={`text-[8px] md:text-[9px] font-black uppercase tracking-[0.15em] ${selectedEngine === 'Web Speech' ? 'text-emerald-400' : 'text-indigo-400'}`}>
-                    {selectedEngine === 'Web Speech' ? 'Offline Engine' : 'AI Cloud Engine'}
+                  <span className={`text-[8px] md:text-[9px] font-black uppercase tracking-[0.15em] ${selectedEngine === 'Web Speech' ? 'text-emerald-400' : 'text-sky-400'}`}>
+                    {selectedEngine === 'Web Speech' ? 'Offline Engine' : 'Azure Neural Engine'}
                   </span>
                   {!localAvailable && (
                     <span className="text-[7px] text-slate-500 font-bold uppercase mt-0.5 flex items-center gap-1">
