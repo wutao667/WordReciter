@@ -63,7 +63,7 @@ export const stopAllSpeech = () => {
 /**
  * 方案 A: 浏览器本地语音合成
  */
-export const speakWordLocal = (text: string): Promise<void> => {
+export const speakWordLocal = (text: string, signal?: AbortSignal): Promise<void> => {
   return new Promise((resolve, reject) => {
     if (!window.speechSynthesis) {
       reject(new Error("不支持本地语音"));
@@ -74,12 +74,30 @@ export const speakWordLocal = (text: string): Promise<void> => {
       return;
     }
 
+    const onAbort = () => {
+      window.speechSynthesis.cancel();
+      reject(new Error("AbortError"));
+    };
+
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener('abort', onAbort);
+
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
-    utterance.rate = 0.8; // 稍微放慢一点，方便听写
-    utterance.onend = () => resolve();
-    utterance.onerror = (e) => reject(new Error(`本地错误: ${e.error}`));
+    utterance.rate = 0.8;
+    utterance.onend = () => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    utterance.onerror = (e) => {
+      signal?.removeEventListener('abort', onAbort);
+      if (e.error === 'interrupted' || e.error === 'canceled') {
+          reject(new Error("AbortError"));
+      } else {
+          reject(new Error(`本地错误: ${e.error}`));
+      }
+    };
     window.speechSynthesis.speak(utterance);
     
     if (window.speechSynthesis.paused) {
@@ -91,58 +109,81 @@ export const speakWordLocal = (text: string): Promise<void> => {
 /**
  * 方案 B: 云端 AI-TTS 语音合成
  */
-export const speakWithAiTTS = async (text: string): Promise<void> => {
-  stopAllSpeech(); // 播放前先清理
+export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
+  stopAllSpeech(); 
 
-  const response = await fetch(AI_TTS_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: "glm-tts",
-      input: text,
-      voice: "female",
-      speed: 0.9, // 听写模式稍微减速
-      volume: 1.0,
-      response_format: "wav"
-    })
-  });
+  try {
+    const response = await fetch(AI_TTS_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      signal: signal, // 绑定信号到 fetch
+      body: JSON.stringify({
+        model: "glm-tts",
+        input: text,
+        voice: "female",
+        speed: 0.9,
+        volume: 1.0,
+        response_format: "wav"
+      })
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `AI 语音失败: ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const audio = new Audio(url);
-  currentAiAudio = audio;
-
-  return new Promise((resolve, reject) => {
-    const playPromise = audio.play();
-    
-    if (playPromise !== undefined) {
-      playPromise.then(() => {
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          if (currentAiAudio === audio) currentAiAudio = null;
-          resolve();
-        };
-      }).catch(err => {
-        URL.revokeObjectURL(url);
-        if (currentAiAudio === audio) currentAiAudio = null;
-        reject(new Error("被浏览器拦截，请点击界面重试"));
-      });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `AI 语音失败: ${response.status}`);
     }
 
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      if (currentAiAudio === audio) currentAiAudio = null;
-      reject(new Error("音频流加载失败"));
-    };
-  });
+    const blob = await response.blob();
+    if (signal?.aborted) throw new Error("AbortError");
+
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentAiAudio = audio;
+
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        audio.pause();
+        audio.src = "";
+        URL.revokeObjectURL(url);
+        reject(new Error("AbortError"));
+      };
+
+      signal?.addEventListener('abort', onAbort);
+
+      const playPromise = audio.play();
+      
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          audio.onended = () => {
+            signal?.removeEventListener('abort', onAbort);
+            URL.revokeObjectURL(url);
+            if (currentAiAudio === audio) currentAiAudio = null;
+            resolve();
+          };
+        }).catch(err => {
+          signal?.removeEventListener('abort', onAbort);
+          URL.revokeObjectURL(url);
+          if (currentAiAudio === audio) currentAiAudio = null;
+          if (err.name === 'AbortError') reject(err);
+          else reject(new Error("被浏览器拦截，请点击界面重试"));
+        });
+      }
+
+      audio.onerror = () => {
+        signal?.removeEventListener('abort', onAbort);
+        URL.revokeObjectURL(url);
+        if (currentAiAudio === audio) currentAiAudio = null;
+        reject(new Error("音频流加载失败"));
+      };
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError' || err.message === 'AbortError') {
+        throw new Error("AbortError");
+    }
+    throw err;
+  }
 };
 
 /**
@@ -165,28 +206,35 @@ export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
   return hasLocal ? 'Web Speech' : 'AI-TTS';
 };
 
-export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-TTS'): Promise<'Web Speech' | 'AI-TTS'> => {
+/**
+ * 统一调度
+ * @param text 要播报的文字
+ * @param forceEngine 强制指定的引擎
+ * @param signal 中断信号
+ */
+export const speakWord = async (text: string, forceEngine?: 'Web Speech' | 'AI-TTS', signal?: AbortSignal): Promise<'Web Speech' | 'AI-TTS'> => {
   if (forceEngine === 'AI-TTS') {
-    await speakWithAiTTS(text);
+    await speakWithAiTTS(text, signal);
     return 'AI-TTS';
   }
   if (forceEngine === 'Web Speech') {
-    await speakWordLocal(text);
+    await speakWordLocal(text, signal);
     return 'Web Speech';
   }
 
   const preferred = getPreferredTTSEngine();
   if (preferred === 'AI-TTS' && process.env.API_KEY) {
-    await speakWithAiTTS(text);
+    await speakWithAiTTS(text, signal);
     return 'AI-TTS';
   }
 
   try {
-    await speakWordLocal(text);
+    await speakWordLocal(text, signal);
     return 'Web Speech';
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'AbortError') throw error;
     if (process.env.API_KEY) {
-      await speakWithAiTTS(text);
+      await speakWithAiTTS(text, signal);
       return 'AI-TTS';
     }
     throw error;

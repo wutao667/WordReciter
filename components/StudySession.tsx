@@ -21,8 +21,11 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const stopPlayback = useCallback(() => {
-    stopAllSpeech(); // 调用 service 层的统一清理函数
-    if (abortControllerRef.current) abortControllerRef.current.abort();
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+    }
+    stopAllSpeech(); 
     setIsPlaying(false);
   }, []);
 
@@ -48,24 +51,17 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     setIsPlaying(true);
     
     try {
-      /**
-       * 核心优化：
-       * 不再使用 for 循环多次调用播放。
-       * 而是将文本拼接为 "Word, Word, Word"。
-       * 标点符号会引导 TTS 引擎在词与词之间产生自然的停顿。
-       * 这样在微信中只需调用一次播放，完美绕开拦截机制。
-       */
       const repeatedText = `${word}。 ${word}。 ${word}`;
-      
-      await speakWord(repeatedText, activeEngine);
+      // 将 AbortSignal 传递给底层服务，确保真正可中断
+      await speakWord(repeatedText, activeEngine, controller.signal);
       
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
+      if (err.message !== 'AbortError' && err.name !== 'AbortError') {
         console.error("Playback failed:", err);
         if (isComponentMounted.current) setHasError(true);
       }
     } finally {
-      if (!controller.signal.aborted && isComponentMounted.current) {
+      if (isComponentMounted.current && abortControllerRef.current === controller) {
         setIsPlaying(false);
       }
     }
@@ -77,20 +73,18 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   };
 
   const toggleEngine = () => {
-    stopPlayback();
     const nextEngine = activeEngine === 'Web Speech' ? 'AI-TTS' : 'Web Speech';
     setActiveEngine(nextEngine);
     unlockAudioContext();
-    setTimeout(() => {
-        if (isComponentMounted.current) startSequence();
-    }, 100);
+    // 这里不需要 setTimeout，useEffect 会自动监测 activeEngine 的变化并调用 startSequence
   };
 
   useEffect(() => {
     if (shuffledWords.length > 0) {
       startSequence();
     }
-  }, [currentIndex, shuffledWords, startSequence]);
+    return () => stopPlayback();
+  }, [currentIndex, shuffledWords, activeEngine, startSequence, stopPlayback]);
 
   const handleNext = () => {
     currentIndex < shuffledWords.length - 1 ? setCurrentIndex(prev => prev + 1) : onFinish();
@@ -131,19 +125,38 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
         <div className="flex-1 flex flex-col items-center justify-center py-12">
           <div className={`w-full aspect-[16/10] rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.02] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''} ${hasError ? 'border-amber-500/40' : ''}`}>
             
-            <div className="absolute top-8 flex items-center gap-4">
-                <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/5">
-                {activeEngine === 'Web Speech' ? <Zap className="w-3 h-3 text-emerald-400" /> : <Cpu className="w-3 h-3 text-indigo-400" />}
-                <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">
-                    {activeEngine === 'Web Speech' ? 'Offline Engine' : 'AI Cloud Engine'}
-                </span>
-                </div>
+            <div className="absolute top-8">
+                {/* 统一的引擎切换按钮 */}
                 <button 
                     onClick={toggleEngine}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-600/40 transition-all active:scale-90 group"
+                    className="flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 group relative overflow-hidden"
                 >
-                    <RefreshCw className="w-3 h-3 group-hover:rotate-180 transition-transform duration-500" />
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em]">切换引擎</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                    
+                    {activeEngine === 'Web Speech' ? (
+                        <div className="flex items-center gap-2">
+                            <Zap className="w-4 h-4 text-emerald-400" />
+                            <div className="flex flex-col items-start leading-none">
+                                <span className="text-[10px] font-black text-white uppercase tracking-[0.1em]">本地引擎</span>
+                                <span className="text-[7px] font-bold text-emerald-400/60 uppercase tracking-[0.05em] mt-0.5">Offline Engine</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <Cpu className="w-4 h-4 text-indigo-400" />
+                            <div className="flex flex-col items-start leading-none">
+                                <span className="text-[10px] font-black text-white uppercase tracking-[0.1em]">AI 云端引擎</span>
+                                <span className="text-[7px] font-bold text-indigo-400/60 uppercase tracking-[0.05em] mt-0.5">Cloud Intelligence</span>
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="w-px h-6 bg-white/10 mx-1" />
+                    
+                    <div className="flex flex-col items-center text-slate-400 group-hover:text-white transition-colors">
+                        <RefreshCw className="w-3 h-3 group-hover:rotate-180 transition-transform duration-500" />
+                        <span className="text-[6px] font-black uppercase tracking-tighter mt-1 opacity-50 group-hover:opacity-100 transition-opacity">切换</span>
+                    </div>
                 </button>
             </div>
 
@@ -153,8 +166,8 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
                   <AlertTriangle className="w-12 h-12" />
                   <p className="text-sm font-black uppercase tracking-widest">播放异常</p>
                   <div className="flex flex-col gap-2">
-                    <button onClick={handleManualPlay} className="px-6 py-2 bg-amber-500 text-slate-900 rounded-full text-[10px] font-black">点击重试</button>
-                    <button onClick={toggleEngine} className="px-6 py-2 bg-white/10 text-white rounded-full text-[10px] font-black">尝试切换引擎</button>
+                    <button onClick={handleManualPlay} className="px-6 py-2 bg-amber-500 text-slate-900 rounded-full text-[10px] font-black shadow-lg shadow-amber-500/20 active:scale-95 transition-transform">点击重试</button>
+                    <button onClick={toggleEngine} className="px-6 py-2 bg-white/10 text-white rounded-full text-[10px] font-black border border-white/5 hover:bg-white/20 active:scale-95 transition-transform">尝试切换引擎</button>
                   </div>
                 </div>
               ) : isWordVisible ? (
