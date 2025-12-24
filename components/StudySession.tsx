@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
-import { speakWord } from '../services/geminiService';
-import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones } from 'lucide-react';
+import { speakWord, getPreferredTTSEngine } from '../services/geminiService';
+import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, Cpu, Zap } from 'lucide-react';
 
 interface StudySessionProps {
   list: WordList;
@@ -14,6 +14,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWordVisible, setIsWordVisible] = useState(false);
+  const [activeEngine, setActiveEngine] = useState<string>('Detecting...');
   
   const isComponentMounted = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -29,6 +30,9 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   useEffect(() => {
     isComponentMounted.current = true;
     setShuffledWords([...list.words].sort(() => Math.random() - 0.5));
+    // 初始引擎检测
+    setActiveEngine(getPreferredTTSEngine());
+    
     return () => {
       isComponentMounted.current = false;
       stopAllAudio();
@@ -41,28 +45,32 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setIsPlaying(true);
+    
     try {
       for (let i = 0; i < 3; i++) {
         if (controller.signal.aborted || !isComponentMounted.current) break;
-        await speakWord(shuffledWords[currentIndex]);
+        const usedEngine = await speakWord(shuffledWords[currentIndex]);
+        // 如果在播放过程中发现实际使用的引擎与预想不符（比如本地引擎突然失败），则更新 UI
+        if (usedEngine !== activeEngine) setActiveEngine(usedEngine);
+        
         if (i < 2 && !controller.signal.aborted && isComponentMounted.current) await delay(1200);
       }
+    } catch (err) {
+      console.error("Playback failed", err);
     } finally {
       if (!controller.signal.aborted && isComponentMounted.current) setIsPlaying(false);
     }
-  }, [shuffledWords, currentIndex, stopAllAudio]);
+  }, [shuffledWords, currentIndex, stopAllAudio, activeEngine]);
 
   useEffect(() => {
     if (shuffledWords.length > 0) startSequence();
   }, [currentIndex, shuffledWords, startSequence]);
 
   const handleNext = () => {
-    // 移除 setIsWordVisible(false)，保留当前的显示/隐藏状态
     currentIndex < shuffledWords.length - 1 ? setCurrentIndex(prev => prev + 1) : onFinish();
   };
 
   const handlePrevious = () => {
-    // 移除 setIsWordVisible(false)，保留当前的显示/隐藏状态
     if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
   };
 
@@ -96,6 +104,15 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
 
         <div className="flex-1 flex flex-col items-center justify-center py-12">
           <div className={`w-full aspect-[16/10] rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.02] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''}`}>
+            
+            {/* 引擎状态指示 - 位于卡片顶部内部 */}
+            <div className="absolute top-8 flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/5">
+              {activeEngine === 'Web Speech' ? <Zap className="w-3 h-3 text-emerald-400" /> : <Cpu className="w-3 h-3 text-indigo-400" />}
+              <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">
+                {activeEngine === 'Web Speech' ? 'Offline Engine' : 'AI Cloud Engine'}
+              </span>
+            </div>
+
             <div className="relative text-center w-full h-48 flex flex-col items-center justify-center">
               {isWordVisible ? (
                 <h1 className="text-6xl sm:text-8xl font-black tracking-tighter text-white animate-in fade-in zoom-in-90 duration-500 break-all px-4 drop-shadow-2xl">
@@ -151,8 +168,14 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
             <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
               <div className="h-full bg-gradient-to-r from-indigo-500 via-teal-400 to-emerald-500 transition-all duration-1000 ease-out" style={{ width: `${progress}%` }} />
             </div>
-            <div className="flex justify-between mt-4">
+            <div className="flex justify-between mt-4 items-center">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">听写进度</span>
+              
+              {/* 引擎名称展示 - 细小的灰色提示词 */}
+              <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] flex items-center gap-2">
+                当前驱动: <span className={activeEngine === 'GLM-TTS' ? 'text-indigo-400/40' : 'text-emerald-400/40'}>{activeEngine}</span>
+              </span>
+
               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">已完成 {Math.round(progress)}%</span>
             </div>
           </div>

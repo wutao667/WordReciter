@@ -105,17 +105,27 @@ export const speakWithGlmTTS = async (text: string): Promise<void> => {
 };
 
 /**
- * 统一调度：优先本地，不可用或失败时自动尝试云端 (如果配置了 Key)
+ * 智能检测当前环境下首选的 TTS 引擎
  */
-export const speakWord = async (text: string): Promise<void> => {
+export const getPreferredTTSEngine = (): 'Web Speech' | 'GLM-TTS' => {
+  const hasLocal = !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
+  return hasLocal ? 'Web Speech' : 'GLM-TTS';
+};
+
+/**
+ * 统一调度：优先本地，不可用或失败时自动尝试云端
+ * 返回最终使用的引擎名称
+ */
+export const speakWord = async (text: string): Promise<'Web Speech' | 'GLM-TTS'> => {
   try {
-    // 首先尝试本地引擎，因为它是零延迟且离线的
     await speakWordLocal(text);
+    return 'Web Speech';
   } catch (error) {
-    console.warn("本地 TTS 失败，尝试 GLM-TTS 云端合成...", error);
     if (process.env.API_KEY) {
       await speakWithGlmTTS(text);
+      return 'GLM-TTS';
     }
+    throw error;
   }
 };
 
