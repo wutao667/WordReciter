@@ -8,11 +8,16 @@ const AI_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 const AI_TTS_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/audio/speech';
 const MODEL_NAME = 'glm-4.6v-flash';
 
+// Azure TTS 配置
+// 注意：Azure TTS 需要 API Key 和对应的区域代码（如 eastasia, eastus 等）
+const AZURE_REGION = 'eastasia'; 
+const AZURE_TTS_ENDPOINT = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
+
 // 环境检测常量
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 
 // 引用当前正在播放的音频对象，用于中断播放
-let currentAiAudio: HTMLAudioElement | null = null;
+let currentAudio: HTMLAudioElement | null = null;
 
 /**
  * 验证 API 连通性
@@ -45,16 +50,16 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
 };
 
 /**
- * 停止所有正在进行的播报（本地 + 云端）
+ * 停止所有正在进行的播报（本地 + 所有云端）
  */
 export const stopAllSpeech = () => {
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
-  if (currentAiAudio) {
-    currentAiAudio.pause();
-    currentAiAudio.src = "";
-    currentAiAudio = null;
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = "";
+    currentAudio = null;
   }
 };
 
@@ -67,7 +72,6 @@ export const speakWordLocal = (text: string, signal?: AbortSignal): Promise<void
       reject(new Error("不支持本地语音"));
       return;
     }
-    // 强制尝试，不再直接拒绝，交由 UI 层控制
     const onAbort = () => {
       window.speechSynthesis.cancel();
       reject(new Error("AbortError"));
@@ -79,7 +83,7 @@ export const speakWordLocal = (text: string, signal?: AbortSignal): Promise<void
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-CN' : 'en-US';
-    utterance.rate = 0.6; // 语速 0.6
+    utterance.rate = 0.6;
     utterance.onend = () => {
       signal?.removeEventListener('abort', onAbort);
       resolve();
@@ -101,7 +105,53 @@ export const speakWordLocal = (text: string, signal?: AbortSignal): Promise<void
 };
 
 /**
- * 方案 B: 云端 AI-TTS 语音合成
+ * 辅助：处理云端音频流播放逻辑
+ */
+const playAudioBlob = async (blob: Blob, signal?: AbortSignal): Promise<void> => {
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  currentAudio = audio;
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      audio.pause();
+      audio.src = "";
+      URL.revokeObjectURL(url);
+      reject(new Error("AbortError"));
+    };
+
+    signal?.addEventListener('abort', onAbort);
+
+    const playPromise = audio.play();
+    
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        audio.onended = () => {
+          signal?.removeEventListener('abort', onAbort);
+          URL.revokeObjectURL(url);
+          if (currentAudio === audio) currentAudio = null;
+          resolve();
+        };
+      }).catch(err => {
+        signal?.removeEventListener('abort', onAbort);
+        URL.revokeObjectURL(url);
+        if (currentAudio === audio) currentAudio = null;
+        if (err.name === 'AbortError') reject(err);
+        else reject(new Error("播放被拦截或失败"));
+      });
+    }
+
+    audio.onerror = () => {
+      signal?.removeEventListener('abort', onAbort);
+      URL.revokeObjectURL(url);
+      if (currentAudio === audio) currentAudio = null;
+      reject(new Error("音频流加载失败"));
+    };
+  });
+};
+
+/**
+ * 方案 B: 云端 GLM AI-TTS 语音合成
  */
 export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
   stopAllSpeech(); 
@@ -118,7 +168,7 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
         model: "glm-tts",
         input: text,
         voice: "female",
-        speed: 0.6, // 语速 0.6
+        speed: 0.6,
         volume: 1.0,
         response_format: "wav"
       })
@@ -126,56 +176,65 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `AI 语音失败: ${response.status}`);
+      throw new Error(errorData.error?.message || `GLM 语音失败: ${response.status}`);
     }
 
     const blob = await response.blob();
     if (signal?.aborted) throw new Error("AbortError");
-
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    currentAiAudio = audio;
-
-    return new Promise((resolve, reject) => {
-      const onAbort = () => {
-        audio.pause();
-        audio.src = "";
-        URL.revokeObjectURL(url);
-        reject(new Error("AbortError"));
-      };
-
-      signal?.addEventListener('abort', onAbort);
-
-      const playPromise = audio.play();
-      
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          audio.onended = () => {
-            signal?.removeEventListener('abort', onAbort);
-            URL.revokeObjectURL(url);
-            if (currentAiAudio === audio) currentAiAudio = null;
-            resolve();
-          };
-        }).catch(err => {
-          signal?.removeEventListener('abort', onAbort);
-          URL.revokeObjectURL(url);
-          if (currentAiAudio === audio) currentAiAudio = null;
-          if (err.name === 'AbortError') reject(err);
-          else reject(new Error("播放被拦截"));
-        });
-      }
-
-      audio.onerror = () => {
-        signal?.removeEventListener('abort', onAbort);
-        URL.revokeObjectURL(url);
-        if (currentAiAudio === audio) currentAiAudio = null;
-        reject(new Error("音频流加载失败"));
-      };
-    });
+    await playAudioBlob(blob, signal);
   } catch (err: any) {
-    if (err.name === 'AbortError' || err.message === 'AbortError') {
-        throw new Error("AbortError");
+    if (err.name === 'AbortError' || err.message === 'AbortError') throw new Error("AbortError");
+    throw err;
+  }
+};
+
+/**
+ * 方案 C: Azure 神经网络语音合成 (Azure TTS)
+ */
+export const speakWithAzureTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
+  stopAllSpeech();
+
+  if (!process.env.AZURE_API_KEY) {
+    throw new Error("AZURE_API_KEY 未配置");
+  }
+
+  const isChinese = /[\u4e00-\u9fa5]/.test(text);
+  // 使用目前最自然的神经网络音色
+  const voiceName = isChinese ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AvaMultilingualNeural';
+  const lang = isChinese ? 'zh-CN' : 'en-US';
+
+  // 构建 SSML 格式以实现精确控制
+  const ssml = `
+    <speak version='1.0' xml:lang='${lang}'>
+      <voice name='${voiceName}'>
+        <prosody rate='0.6'>${text}</prosody>
+      </voice>
+    </speak>
+  `;
+
+  try {
+    const response = await fetch(AZURE_TTS_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': process.env.AZURE_API_KEY,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-16khz-128kbitrate-mono-mp3',
+        'User-Agent': 'LingoEcho'
+      },
+      signal: signal,
+      body: ssml
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Azure TTS 错误: ${response.status} ${errorText}`);
     }
+
+    const blob = await response.blob();
+    if (signal?.aborted) throw new Error("AbortError");
+    await playAudioBlob(blob, signal);
+  } catch (err: any) {
+    if (err.name === 'AbortError' || err.message === 'AbortError') throw new Error("AbortError");
     throw err;
   }
 };
@@ -201,19 +260,16 @@ export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
 export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine?: 'Web Speech' | 'AI-TTS'): Promise<'Web Speech' | 'AI-TTS'> => {
   const engineToUse = forcedEngine || getPreferredTTSEngine();
   
-  // 如果指定用 AI 且有 Key
   if (engineToUse === 'AI-TTS' && process.env.GLM_API_KEY) {
     await speakWithAiTTS(text, signal);
     return 'AI-TTS';
   }
 
-  // 尝试用本地，如果失败则回退 AI
   try {
     await speakWordLocal(text, signal);
     return 'Web Speech';
   } catch (error: any) {
     if (error.message === 'AbortError') throw error;
-    // 本地报错，如果不是主动中断，尝试回退 AI
     if (process.env.GLM_API_KEY) {
       await speakWithAiTTS(text, signal);
       return 'AI-TTS';

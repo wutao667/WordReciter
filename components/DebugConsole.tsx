@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, Trash2, Zap, Globe, Volume2, PlayCircle, Loader2, Sparkles, AlertCircle, Info, Languages, Monitor, Smartphone, MessageSquare, Terminal, Copy, CheckCircle2 } from 'lucide-react';
-import { testGeminiConnectivity, speakWithAiTTS, speakWordLocal } from '../services/geminiService';
+import { X, ShieldCheck, Trash2, Zap, Globe, Volume2, PlayCircle, Loader2, Sparkles, AlertCircle, Info, Languages, Monitor, Smartphone, MessageSquare, Terminal, Copy, CheckCircle2, Cloud } from 'lucide-react';
+import { testGeminiConnectivity, speakWithAiTTS, speakWordLocal, speakWithAzureTTS } from '../services/geminiService';
 
 interface DebugConsoleProps {
   onClose: () => void;
@@ -57,16 +57,18 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     setIsTestingApi(false);
   };
 
-  const testTTS = async (mode: 'local' | 'ai') => {
+  const testTTS = async (mode: 'local' | 'ai' | 'azure') => {
     setIsTestingTTS(true);
-    const testText = "Welcome to Lingo Echo vocabulary reciter.";
-    addLog('info', `尝试 [${mode === 'local' ? '本地' : 'AI 云端'}] 语音合成: "${testText}"`);
+    const testText = "Hello, this is LingoEcho testing the voice quality. 欢迎使用听写助手。";
+    addLog('info', `尝试 [${mode === 'local' ? '本地' : mode === 'ai' ? 'GLM 云端' : 'Azure 神经网络'}] 语音合成...`);
     
     try {
       if (mode === 'local') {
         await speakWordLocal(testText);
-      } else {
+      } else if (mode === 'ai') {
         await speakWithAiTTS(testText);
+      } else {
+        await speakWithAzureTTS(testText);
       }
       addLog('success', `${mode.toUpperCase()} 播报成功`);
     } catch (err: any) {
@@ -126,7 +128,7 @@ UA: ${envInfo.userAgent}
                     <Globe className="w-5 h-5 text-indigo-500" />
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">AI 核心接口自检</h3>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">此测试将通过发送一个简单的 Ping 请求来验证您的 API Key 是否有效，以及云端 AI 的 Vision/Chat 模型是否可用。</p>
+                  <p className="text-xs text-slate-500 leading-relaxed">此测试将通过发送一个简单的 Ping 请求来验证您的 GLM_API_KEY 是否有效。</p>
                   <button 
                     onClick={runApiTest} 
                     disabled={isTestingApi}
@@ -159,36 +161,55 @@ UA: ${envInfo.userAgent}
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">语音引擎多维测试</h3>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* 本地引擎 */}
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
                       <div className="flex justify-between items-start">
-                        <div className="px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-md uppercase">Offline Engine</div>
+                        <div className="px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-md uppercase">Offline</div>
                         <Volume2 className="w-4 h-4 text-slate-400" />
                       </div>
-                      <h4 className="font-black text-xs text-slate-800">本地合成 (Web TTS)</h4>
-                      <p className="text-[10px] text-slate-500">基于浏览器原生 Web Speech API。延迟低，无需联网，但音质较生硬。</p>
+                      <h4 className="font-black text-xs text-slate-800">Web TTS</h4>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">浏览器原生 API。零延迟，但音色受限。</p>
                       <button 
                         onClick={() => testTTS('local')}
                         disabled={isTestingTTS}
                         className="w-full py-3 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                       >
-                        <PlayCircle className="w-4 h-4" /> 运行本地测试
+                        <PlayCircle className="w-4 h-4" /> 运行测试
                       </button>
                     </div>
 
+                    {/* GLM 引擎 */}
                     <div className="bg-white p-5 rounded-2xl border border-indigo-50 shadow-sm space-y-4">
                       <div className="flex justify-between items-start">
-                        <div className="px-2 py-1 bg-indigo-50 text-indigo-500 text-[10px] font-black rounded-md uppercase">AI Cloud Engine</div>
+                        <div className="px-2 py-1 bg-indigo-50 text-indigo-500 text-[10px] font-black rounded-md uppercase">GLM-TTS</div>
                         <Sparkles className="w-4 h-4 text-indigo-400" />
                       </div>
-                      <h4 className="font-black text-xs text-slate-800">云端合成 (AI-TTS)</h4>
-                      <p className="text-[10px] text-slate-500">高质量 AI 仿真配音。适配性好，解决微信/移动端无声问题。</p>
+                      <h4 className="font-black text-xs text-slate-800">智谱 AI 语音</h4>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">自然的 AI 播报。解决移动端无声问题。</p>
                       <button 
                         onClick={() => testTTS('ai')}
                         disabled={isTestingTTS}
-                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
+                        className="w-full py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-100 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                       >
-                        <Zap className="w-4 h-4" /> 运行 AI 测试
+                        <Zap className="w-4 h-4" /> 运行测试
+                      </button>
+                    </div>
+
+                    {/* Azure 引擎 - 新增 */}
+                    <div className="bg-white p-5 rounded-2xl border border-sky-50 shadow-sm space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="px-2 py-1 bg-sky-50 text-sky-600 text-[10px] font-black rounded-md uppercase">Azure-TTS</div>
+                        <Cloud className="w-4 h-4 text-sky-500" />
+                      </div>
+                      <h4 className="font-black text-xs text-slate-800">Azure 神经网络</h4>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">业内顶级音质，细腻如真人。需配置 Key。</p>
+                      <button 
+                        onClick={() => testTTS('azure')}
+                        disabled={isTestingTTS}
+                        className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-sky-100"
+                      >
+                        <Cloud className="w-4 h-4" /> 运行测试
                       </button>
                     </div>
                   </div>
@@ -196,7 +217,7 @@ UA: ${envInfo.userAgent}
                   <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3 items-start">
                     <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                     <div className="text-[10px] text-amber-800 font-bold leading-relaxed">
-                      诊断建议：如果在微信中“本地测试”无反应，请务必确保已配置有效的 API Key 并执行“AI 测试”。云端 AI-TTS 是移动端环境下发声的最终保障。
+                      配置说明：Azure TTS 需要在环境变量中设置 <code className="bg-amber-100 px-1 rounded">AZURE_API_KEY</code>。如果“运行测试”报错，请检查您的 Key 是否有效及区域配置是否匹配。
                     </div>
                   </div>
                 </div>
@@ -206,7 +227,6 @@ UA: ${envInfo.userAgent}
             {activeTab === 'env' && envInfo && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Basic Device Card */}
                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
                     <div className="flex items-center gap-3">
                       {envInfo.isMobile ? <Smartphone className="w-5 h-5 text-indigo-500" /> : <Monitor className="w-5 h-5 text-indigo-500" />}
@@ -228,7 +248,6 @@ UA: ${envInfo.userAgent}
                     </div>
                   </div>
 
-                  {/* Context Card */}
                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
                     <div className="flex items-center gap-3">
                       <MessageSquare className="w-5 h-5 text-emerald-500" />
@@ -255,7 +274,6 @@ UA: ${envInfo.userAgent}
                   </div>
                 </div>
 
-                {/* User Agent Block */}
                 <div className="p-6 bg-slate-900 rounded-3xl border border-slate-800 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 text-white">
@@ -273,13 +291,6 @@ UA: ${envInfo.userAgent}
                   <div className="p-4 bg-black/50 rounded-2xl border border-white/5 font-mono text-[10px] text-slate-400 break-all leading-relaxed tracking-tight">
                     {envInfo.userAgent}
                   </div>
-                </div>
-
-                <div className="flex gap-4 p-5 bg-indigo-50 rounded-2xl border border-indigo-100">
-                  <Info className="w-5 h-5 text-indigo-500 mt-0.5 shrink-0" />
-                  <p className="text-[10px] text-indigo-900 font-bold leading-relaxed">
-                    技术提示：微信内置浏览器 (XWeb) 对 Web Speech API 的支持较为有限且不稳定。如果在该环境下无法听到本地声音，系统将自动回退至“AI Cloud Engine”。
-                  </p>
                 </div>
               </div>
             )}
