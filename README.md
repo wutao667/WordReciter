@@ -27,7 +27,7 @@ LingoEcho 是一款专为高效记忆单词设计的极简 Web 应用。它结�
 
 ### 2. 在 Vercel 部署时配置 (推荐)
 如果您使用 Vercel 一键部署，请在项目设置中添加环境变量：
-- **Variable Name**: `API_KEY`
+- **Variable Name**: `GLM_API_KEY`
 - **Value**: `您的 API Key 内容`
 - 添加后重新执行部署即可生效。
 
@@ -35,7 +35,7 @@ LingoEcho 是一款专为高效记忆单词设计的极简 Web 应用。它结�
 在项目根目录创建 `.env` 文件（或在 shell 中临时导出）：
 ```bash
 # 示例
-API_KEY=your_actual_api_key_here
+GLM_API_KEY=your_actual_api_key_here
 ```
 
 ## 🚀 部署步骤
@@ -43,7 +43,7 @@ API_KEY=your_actual_api_key_here
 ### Vercel 部署
 1. **关联仓库**：将代码推送至 GitHub。
 2. **导入项目**：在 Vercel 中选择该仓库。
-3. **配置变量**：在 "Environment Variables" 栏目添加上述的 `API_KEY`。
+3. **配置变量**：在 "Environment Variables" 栏目添加上述的 `GLM_API_KEY`。
 4. **点击 Deploy**：等待约 1 分钟即可在线访问。
 
 ## 📖 使用方法

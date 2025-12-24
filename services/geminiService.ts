@@ -23,7 +23,7 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
     const response = await fetch(AI_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.API_KEY}`,
+        'Authorization': `Bearer ${process.env.GLM_API_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -110,7 +110,7 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
     const response = await fetch(AI_TTS_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.API_KEY}`,
+        'Authorization': `Bearer ${process.env.GLM_API_KEY}`,
         'Content-Type': 'application/json'
       },
       signal: signal,
@@ -202,7 +202,7 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
   const engineToUse = forcedEngine || getPreferredTTSEngine();
   
   // 如果指定用 AI 且有 Key
-  if (engineToUse === 'AI-TTS' && process.env.API_KEY) {
+  if (engineToUse === 'AI-TTS' && process.env.GLM_API_KEY) {
     await speakWithAiTTS(text, signal);
     return 'AI-TTS';
   }
@@ -214,7 +214,7 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
   } catch (error: any) {
     if (error.message === 'AbortError') throw error;
     // 本地报错，如果不是主动中断，尝试回退 AI
-    if (process.env.API_KEY) {
+    if (process.env.GLM_API_KEY) {
       await speakWithAiTTS(text, signal);
       return 'AI-TTS';
     }
@@ -230,7 +230,7 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
     const response = await fetch(AI_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.API_KEY}`,
+        'Authorization': `Bearer ${process.env.GLM_API_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
