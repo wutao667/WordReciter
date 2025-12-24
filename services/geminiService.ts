@@ -175,7 +175,7 @@ export const speakWord = async (text: string): Promise<'Web Speech' | 'AI-TTS'> 
 };
 
 /**
- * OCR 提取
+ * OCR 提取：优化提示词，仅保留英文和中文单词，剔除数字
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {
@@ -192,7 +192,10 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
             role: "user",
             content: [
               { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
-              { type: "text", text: "Extract words/phrases, one per line. Pure text only." }
+              { 
+                type: "text", 
+                text: "Extract only English and Chinese words/phrases from the image. List them one per line. Strictly exclude any numbers, page numbers, dates, or non-textual symbols. Return ONLY the words themselves." 
+              }
             ]
           }
         ]
@@ -201,7 +204,12 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
 
     const data = await response.json();
     const rawText = data.choices[0]?.message?.content || "";
-    const words = rawText.split('\n').map((w: string) => w.trim()).filter((w: string) => w && !/^\d+$/.test(w));
+    
+    // 后处理：移除所有剩余数字，并过滤掉空行
+    const words = rawText
+      .split('\n')
+      .map((w: string) => w.replace(/[0-9]/g, '').trim()) // 移除所有数字字符
+      .filter((w: string) => w.length > 0); // 过滤掉因移除数字变成空行的内容
 
     return returnRaw ? { raw: rawText, cleaned: words } : words;
   } catch (error: any) {
