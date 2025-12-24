@@ -183,7 +183,7 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
     if (signal?.aborted) throw new Error("AbortError");
     await playAudioBlob(blob, signal);
   } catch (err: any) {
-    if (err.name='AbortError' || err.message === 'AbortError') throw new Error("AbortError");
+    if (err.name === 'AbortError' || err.message === 'AbortError') throw new Error("AbortError");
     throw err;
   }
 };
@@ -251,10 +251,14 @@ export const isLocalTTSSupported = (): boolean => {
 };
 
 /**
- * 智能选择引擎
+ * 智能选择引擎：优先使用在线高质量引擎 (Azure/GLM)
  */
 export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
-  return isLocalTTSSupported() ? 'Web Speech' : 'AI-TTS';
+  // 只要配置了任一在线 Key，默认优先使用 AI-TTS
+  if (process.env.AZURE_API_KEY || process.env.GLM_API_KEY) {
+    return 'AI-TTS';
+  }
+  return 'Web Speech';
 };
 
 /**

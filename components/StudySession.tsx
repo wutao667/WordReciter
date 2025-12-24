@@ -16,7 +16,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const [isWordVisible, setIsWordVisible] = useState(false);
   const [hasError, setHasError] = useState(false);
   
-  // 引擎选择状态
+  // 引擎选择状态：现在 getPreferredTTSEngine() 会默认返回 AI-TTS (如果有 key)
   const [selectedEngine, setSelectedEngine] = useState<'Web Speech' | 'AI-TTS'>(getPreferredTTSEngine());
   const [activeEngine, setActiveEngine] = useState<'Web Speech' | 'AI-TTS'>(selectedEngine);
   const localAvailable = isLocalTTSSupported();
@@ -95,7 +95,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   };
 
   const toggleEngine = () => {
-    if (!localAvailable) return;
+    if (!localAvailable && selectedEngine === 'AI-TTS') return; // 不能切到 Web 如果不可用
     const next = selectedEngine === 'Web Speech' ? 'AI-TTS' : 'Web Speech';
     setSelectedEngine(next);
     // 切换后立即重播
@@ -177,8 +177,8 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
             <div className="mb-4 md:mb-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
               <button 
                 onClick={toggleEngine}
-                disabled={!localAvailable}
-                className={`group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full border backdrop-blur-md shadow-xl transition-all duration-500 active:scale-95 ${!localAvailable ? 'bg-slate-900/50 border-white/5 opacity-80' : 'bg-white/5 hover:bg-white/10 cursor-pointer'} ${selectedEngine === 'Web Speech' ? 'border-emerald-500/30' : 'border-sky-500/30'}`}
+                disabled={!localAvailable && selectedEngine === 'AI-TTS'}
+                className={`group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full border backdrop-blur-md shadow-xl transition-all duration-500 active:scale-95 ${(!localAvailable && selectedEngine === 'AI-TTS') ? 'bg-slate-900/50 border-white/5 opacity-80 cursor-default' : 'bg-white/5 hover:bg-white/10 cursor-pointer'} ${selectedEngine === 'Web Speech' ? 'border-emerald-500/30' : 'border-sky-500/30'}`}
               >
                 <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full animate-pulse ${selectedEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.6)]'}`} />
                 
