@@ -316,10 +316,16 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
 
 /**
  * 视觉分步诊断 (前端逻辑)
+ * @param testImage 可选的真实 Base64 图片数据，用于全量提取测试
  */
-export const diagnoseVisionProcess = async (onProgress: (step: string, status: 'loading' | 'success' | 'error', details?: string) => void) => {
+export const diagnoseVisionProcess = async (
+  onProgress: (step: string, status: 'loading' | 'success' | 'error', details?: string) => void,
+  testImage?: string
+) => {
   const start = Date.now();
+  
   try {
+    // 步骤 1: 基础代理握手测试
     onProgress('Proxy Handshake', 'loading', 'Testing Vercel API Route (Gemini)...');
     const res = await fetch(PROXY_OCR_ENDPOINT, {
       method: 'POST',
@@ -330,11 +336,24 @@ export const diagnoseVisionProcess = async (onProgress: (step: string, status: '
     if (!res.ok) throw new Error(`Proxy status: ${res.status}`);
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Server rejected handshake');
-    
     onProgress('Proxy Handshake', 'success', `Connected in ${Date.now() - start}ms.`);
+
+    // 步骤 2: 全量提取测试 (如果用户上传了图片)
+    if (testImage) {
+      onProgress('Full Extraction Test', 'loading', 'Sending real image for OCR analysis...');
+      const fullStart = Date.now();
+      const extracted = await extractWordsFromImage(testImage, true) as { raw: string, cleaned: string[] };
+      onProgress(
+        'Full Extraction Test', 
+        'success', 
+        `Extracted ${extracted.cleaned.length} words in ${Date.now() - fullStart}ms.\nResult: ${extracted.cleaned.slice(0, 5).join(', ')}${extracted.cleaned.length > 5 ? '...' : ''}`
+      );
+    }
+
     return { success: true };
   } catch (error: any) {
-    onProgress('Proxy Handshake', 'error', error.message);
+    const stepName = testImage ? 'Full Extraction Test' : 'Proxy Handshake';
+    onProgress(stepName, 'error', error.message);
     return { success: false, error: error.message };
   }
 };
