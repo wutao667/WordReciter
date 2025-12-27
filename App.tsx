@@ -32,6 +32,9 @@ const App: React.FC = () => {
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
   
+  // OCR 语种选择状态：默认选中中文
+  const [ocrLangs, setOcrLangs] = useState<{ zh: boolean, en: boolean }>({ zh: true, en: false });
+
   const recognitionRef = useRef<any>(null);
   const manualStopRef = useRef(false);
   const isListeningRef = useRef(false); 
@@ -244,7 +247,12 @@ const App: React.FC = () => {
         });
       }, 1200);
 
-      const extractedResult = await extractWordsFromImage(base64);
+      // 提取选择的语种
+      const selectedLangs = [];
+      if (ocrLangs.zh) selectedLangs.push('zh');
+      if (ocrLangs.en) selectedLangs.push('en');
+
+      const extractedResult = await extractWordsFromImage(base64, false, selectedLangs);
       const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
 
       if (logIntervalRef.current) clearInterval(logIntervalRef.current);
@@ -366,6 +374,36 @@ const App: React.FC = () => {
 
                     <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">快速录入工具</label>
+                      
+                      {/* OCR 语种复选框 */}
+                      <div className="flex items-center gap-4 mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">识别语种</span>
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <input 
+                            type="checkbox" 
+                            checked={ocrLangs.zh} 
+                            onChange={(e) => {
+                              if (!e.target.checked && !ocrLangs.en) return; // 两个都不选不合理
+                              setOcrLangs(prev => ({ ...prev, zh: e.target.checked }));
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all" 
+                          />
+                          <span className={`text-xs font-bold transition-colors ${ocrLangs.zh ? 'text-indigo-600' : 'text-slate-400'}`}>中文</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <input 
+                            type="checkbox" 
+                            checked={ocrLangs.en} 
+                            onChange={(e) => {
+                              if (!e.target.checked && !ocrLangs.zh) return; // 两个都不选不合理
+                              setOcrLangs(prev => ({ ...prev, en: e.target.checked }));
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all" 
+                          />
+                          <span className={`text-xs font-bold transition-colors ${ocrLangs.en ? 'text-indigo-600' : 'text-slate-400'}`}>英文</span>
+                        </label>
+                      </div>
+
                       <div className="flex flex-wrap gap-2">
                         {!isMobile && (
                           <>

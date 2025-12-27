@@ -15,7 +15,7 @@ export default async function handler(req: Request) {
 
   try {
     const body = await req.json();
-    const { image, type } = body;
+    const { image, type, languages } = body; // 接收语种偏好
     
     const apiKey = process.env.GEM_API_KEY;
 
@@ -35,7 +35,7 @@ export default async function handler(req: Request) {
         model,
         contents: 'ping',
         config: {
-          thinkingConfig: { thinkingBudget: 0 } // 极速响应
+          thinkingConfig: { thinkingBudget: 0 } 
         }
       });
 
@@ -53,6 +53,15 @@ export default async function handler(req: Request) {
        throw new Error("未接收到图像数据 (image base64 is missing)");
     }
 
+    // 动态构建语种提示词
+    let langInstruction = "英文单词和中文词汇";
+    if (Array.isArray(languages) && languages.length > 0) {
+      const hasZh = languages.includes('zh');
+      const hasEn = languages.includes('en');
+      if (hasZh && !hasEn) langInstruction = "中文词汇（忽略所有英文单词）";
+      else if (hasEn && !hasZh) langInstruction = "英文单词（忽略所有中文词汇）";
+    }
+
     const response = await ai.models.generateContent({
       model,
       contents: {
@@ -64,8 +73,8 @@ export default async function handler(req: Request) {
         }],
       },
       config: {
-        systemInstruction: "你是一个专业的 OCR 插件。请提取图片中所有的英文单词和中文词汇。每行只输出一个单词或短语。不要输出数字、页码、标点符号、Markdown 格式或任何多余的解释。只返回纯文本单词列表。",
-        thinkingConfig: { thinkingBudget: 0 }, // 禁用思考，降低延迟，防止 Edge Function 超时
+        systemInstruction: `你是一个专业的 OCR 插件。请提取图片中所有的${langInstruction}。每行只输出一个单词或短语。不要输出数字、页码、标点符号、Markdown 格式或任何多余的解释。只返回纯文本列表。`,
+        thinkingConfig: { thinkingBudget: 0 }, 
       },
     });
 
@@ -86,7 +95,7 @@ export default async function handler(req: Request) {
   } catch (error: any) {
     console.error('Gemini API Error:', error);
     return new Response(JSON.stringify({ 
-      success: false,
+      success: false, 
       error: error.message || '内部服务器错误' 
     }), { 
       status: 500,

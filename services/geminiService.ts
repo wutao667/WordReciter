@@ -194,12 +194,20 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
   return 'Web Speech';
 };
 
-export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
+/**
+ * 图像 OCR 解析
+ * @param languages 可选语种数组，如 ['zh', 'en']
+ */
+export const extractWordsFromImage = async (
+  base64Data: string, 
+  returnRaw = false, 
+  languages?: string[]
+): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {
     const data = await fetchJsonResponse(PROXY_OCR_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'ocr', image: base64Data })
+      body: JSON.stringify({ type: 'ocr', image: base64Data, languages })
     });
 
     const rawText = data.choices?.[0]?.message?.content || "";
