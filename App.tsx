@@ -166,8 +166,7 @@ const App: React.FC = () => {
         const base64 = (reader.result as string).split(',')[1];
         const extractedResult = await extractWordsFromImage(base64);
         
-        // Fix: extractWordsFromImage is typed as string[], so use it directly
-        const words = extractedResult;
+        const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
 
         if (words.length > 0) {
           setWordsInput(prev => {
