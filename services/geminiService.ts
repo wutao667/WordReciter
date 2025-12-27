@@ -2,14 +2,13 @@
 /**
  * AI API 服务模块
  * 集成云端 AI 视觉 (OCR) 与 AI-TTS (语音合成)
+ * 通过 Vercel API Route 转发视觉请求以保护密钥
  */
 
-const AI_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+const PROXY_OCR_ENDPOINT = '/api/ocr';
 const AI_TTS_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/audio/speech';
-const MODEL_NAME = 'glm-4.6v-flash';
 
 // Azure TTS 配置
-// 允许通过环境变量 AZURE_REGION 自定义区域，默认为东亚 (eastasia)
 export const AZURE_REGION = process.env.AZURE_REGION || 'eastasia'; 
 const AZURE_TTS_ENDPOINT = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
 
@@ -20,30 +19,24 @@ const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 let currentAudio: HTMLAudioElement | null = null;
 
 /**
- * 验证 API 连通性
+ * 验证 API 连通性 (通过 Vercel Proxy)
  */
 export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
   const start = Date.now();
   try {
-    const response = await fetch(AI_ENDPOINT, {
+    const response = await fetch(PROXY_OCR_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.GLM_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: MODEL_NAME,
-        messages: [{ role: "user", content: "ping" }],
-        max_tokens: 10
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'test' })
     });
 
     const latency = Date.now() - start;
-    if (response.ok) {
-      return { success: true, message: "AI 服务连接成功", latency };
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      return { success: true, message: "GLM API 连接成功 (经由代理)", latency };
     }
-    const errorData = await response.json();
-    throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+    throw new Error(data.error || "代理服务器返回异常");
   } catch (error: any) {
     return { success: false, message: error.message || "连接失败", latency: Date.now() - start };
   }
@@ -199,11 +192,9 @@ export const speakWithAzureTTS = async (text: string, signal?: AbortSignal): Pro
   }
 
   const isChinese = /[\u4e00-\u9fa5]/.test(text);
-  // 使用目前最自然的神经网络音色
   const voiceName = isChinese ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AvaMultilingualNeural';
   const lang = isChinese ? 'zh-CN' : 'en-US';
 
-  // 构建 SSML 格式以实现精确控制
   const ssml = `
     <speak version='1.0' xml:lang='${lang}'>
       <voice name='${voiceName}'>
@@ -254,7 +245,6 @@ export const isLocalTTSSupported = (): boolean => {
  * 智能选择引擎：优先使用在线高质量引擎 (Azure/GLM)
  */
 export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
-  // 只要配置了任一在线 Key，默认优先使用 AI-TTS
   if (process.env.AZURE_API_KEY || process.env.GLM_API_KEY) {
     return 'AI-TTS';
   }
@@ -268,7 +258,6 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
   const engineToUse = forcedEngine || getPreferredTTSEngine();
   
   if (engineToUse === 'AI-TTS') {
-    // 优先尝试 Azure
     if (process.env.AZURE_API_KEY) {
       try {
         await speakWithAzureTTS(text, signal);
@@ -278,14 +267,12 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
         console.warn("Azure TTS failed, falling back to GLM:", err);
       }
     }
-    // 备选 GLM
     if (process.env.GLM_API_KEY) {
       await speakWithAiTTS(text, signal);
       return 'AI-TTS';
     }
   }
 
-  // 最后保底方案：Web Speech
   try {
     await speakWordLocal(text, signal);
     return 'Web Speech';
@@ -296,35 +283,25 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
 };
 
 /**
- * OCR 提取
+ * OCR 提取 (通过 Vercel Proxy)
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {
-    const response = await fetch(AI_ENDPOINT, {
+    const response = await fetch(PROXY_OCR_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.GLM_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: MODEL_NAME,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
-              { 
-                type: "text", 
-                text: "Extract only English and Chinese words/phrases from the image. List them one per line. Strictly exclude any numbers, page numbers, dates, or non-textual symbols. Return ONLY the words themselves." 
-              }
-            ]
-          }
-        ]
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        type: 'ocr',
+        image: base64Data 
       })
     });
 
     const data = await response.json();
-    const rawText = data.choices[0]?.message?.content || "";
+    if (!response.ok) {
+      throw new Error(data.error?.message || "代理服务 OCR 失败");
+    }
+
+    const rawText = data.choices?.[0]?.message?.content || "";
     
     const words = rawText
       .split('\n')
@@ -334,5 +311,30 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
     return returnRaw ? { raw: rawText, cleaned: words } : words;
   } catch (error: any) {
     throw new Error(error.message || "图像解析失败");
+  }
+};
+
+/**
+ * 视觉分步诊断 (前端逻辑)
+ */
+export const diagnoseVisionProcess = async (onProgress: (step: string, status: 'loading' | 'success' | 'error', details?: string) => void) => {
+  const start = Date.now();
+  try {
+    onProgress('Proxy Handshake', 'loading', 'Testing Vercel API Route...');
+    const res = await fetch(PROXY_OCR_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'test' })
+    });
+    
+    if (!res.ok) throw new Error(`Proxy status: ${res.status}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Server rejected handshake');
+    
+    onProgress('Proxy Handshake', 'success', `Connected in ${Date.now() - start}ms.`);
+    return { success: true };
+  } catch (error: any) {
+    onProgress('Proxy Handshake', 'error', error.message);
+    return { success: false, error: error.message };
   }
 };
