@@ -66,7 +66,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   const runVisionDiagnosis = async () => {
     setIsTestingVision(true);
     setVisionSteps([]);
-    addLog('info', 'Starting Vision (OCR) step-by-step diagnosis...');
+    addLog('info', 'Starting GLM Vision (OCR) step-by-step diagnosis...');
     
     await diagnoseVisionProcess((stepName, status, details) => {
       setVisionSteps(prev => {
@@ -125,7 +125,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
         {/* Tab switcher */}
         <div className="flex px-8 border-b bg-white shrink-0 overflow-x-auto no-scrollbar">
           <button onClick={() => setActiveTab('api')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>API 核心</button>
-          <button onClick={() => setActiveTab('vision')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'vision' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>视觉 (OCR) 诊断</button>
+          <button onClick={() => setActiveTab('vision')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'vision' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>GLM 视觉诊断</button>
           <button onClick={() => setActiveTab('tts')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'tts' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>语音合成测试</button>
           <button onClick={() => setActiveTab('env')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'env' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>环境信息</button>
         </div>
@@ -166,7 +166,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Camera className="w-5 h-5 text-indigo-500" />
-                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">分步 OCR 流程诊断</h3>
+                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">GLM 分步流程诊断</h3>
                     </div>
                     <button onClick={runVisionDiagnosis} disabled={isTestingVision} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
                       {isTestingVision ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
@@ -178,7 +178,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                     {visionSteps.length === 0 ? (
                       <div className="py-12 text-center text-slate-400">
                         <Info className="w-10 h-10 mx-auto opacity-20 mb-3" />
-                        <p className="text-[10px] font-bold uppercase tracking-widest">点击上方按钮开始分步排查</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest">点击上方按钮开始分步排查 (GLM-4.5-Flash)</p>
                       </div>
                     ) : (
                       visionSteps.map((step, i) => (

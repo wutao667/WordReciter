@@ -3,10 +3,11 @@ import { GoogleGenAI } from "@google/genai";
 
 /**
  * AI API Service Module
- * Integrated with Google Gemini for Vision (OCR) and Azure/Web Speech for TTS.
+ * Integrated with Google Gemini for Text tasks, Zhipu AI (GLM) for Vision (OCR), 
+ * and Azure/Web Speech for TTS.
  */
 
-// Gemini initialization
+// Gemini initialization (Used for general text tasks if needed)
 const getAi = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Audio playback reference
@@ -18,7 +19,7 @@ const AZURE_TTS_ENDPOINT = `https://${AZURE_REGION}.tts.speech.microsoft.com/cog
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 
 /**
- * Connectivity Test for Gemini
+ * Connectivity Test for Gemini (Core API)
  */
 export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
   const start = Date.now();
@@ -40,47 +41,53 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
 };
 
 /**
- * Step-by-step Vision Diagnosis
- * Provides progress updates for debugging hanging issues.
+ * Step-by-step Vision Diagnosis for GLM
+ * Provides progress updates for debugging GLM-4.5-Flash hanging issues.
  */
 export const diagnoseVisionProcess = async (onProgress: (step: string, status: 'loading' | 'success' | 'error', details?: string) => void) => {
   const start = Date.now();
   try {
     // Step 1: Env Check
-    onProgress('Environment Check', 'loading', 'Verifying API Key...');
-    if (!process.env.API_KEY) throw new Error("API_KEY is missing in process.env");
-    onProgress('Environment Check', 'success', 'API Key found.');
+    onProgress('Environment Check', 'loading', 'Verifying GLM API Key...');
+    if (!process.env.GLM_API_KEY) throw new Error("GLM_API_KEY is missing in process.env");
+    onProgress('Environment Check', 'success', 'GLM API Key found.');
 
-    // Step 2: SDK Init
-    onProgress('SDK Initialization', 'loading', 'Instantiating GoogleGenAI...');
-    const ai = getAi();
-    onProgress('SDK Initialization', 'success', 'SDK Ready.');
-
-    // Step 3: Payload Prep
-    onProgress('Payload Preparation', 'loading', 'Generating test image part...');
-    // Tiny 1x1 transparent pixel in base64
+    // Step 2: Payload Prep
+    onProgress('Payload Preparation', 'loading', 'Encoding dummy image...');
     const dummyImage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-    const imagePart = {
-      inlineData: {
-        mimeType: 'image/png',
-        data: dummyImage,
-      },
-    };
-    onProgress('Payload Preparation', 'success', 'Payload encoded.');
+    onProgress('Payload Preparation', 'success', 'Image encoded.');
 
-    // Step 4: Network Request
-    onProgress('API Request', 'loading', 'Sending request to gemini-3-flash-preview...');
+    // Step 3: API Handshake
+    onProgress('GLM API Request', 'loading', 'Sending request to GLM-4.5-Flash...');
     const apiStart = Date.now();
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: { parts: [imagePart, { text: 'Respond with "READY"' }] },
+    
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.GLM_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: "glm-4.5-flash",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Respond with 'READY'" },
+            { type: "image_url", image_url: { url: `data:image/png;base64,${dummyImage}` } }
+          ]
+        }]
+      })
     });
-    const apiLatency = Date.now() - apiStart;
-    onProgress('API Request', 'success', `Response received in ${apiLatency}ms.`);
 
-    // Step 5: Content Extraction
-    onProgress('Data Parsing', 'loading', 'Extracting text...');
-    const text = response.text;
+    const apiLatency = Date.now() - apiStart;
+    if (!response.ok) throw new Error(`GLM API Error: ${response.status}`);
+    
+    onProgress('GLM API Request', 'success', `Response received in ${apiLatency}ms.`);
+
+    // Step 4: Content Extraction
+    onProgress('Data Parsing', 'loading', 'Extracting message...');
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content;
     onProgress('Data Parsing', 'success', `Text extracted: "${text?.trim()}"`);
 
     return { success: true, totalTime: Date.now() - start };
@@ -183,20 +190,46 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
 };
 
 /**
- * Gemini OCR Extraction
+ * GLM-4.5-Flash OCR Extraction
  */
 export const extractWordsFromImage = async (base64Data: string): Promise<string[]> => {
-  const ai = getAi();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: {
-      parts: [
-        { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
-        { text: "Extract only English and Chinese words/phrases from the image. List them one per line. Strictly exclude any numbers or metadata. Return ONLY the words." }
-      ],
+  const apiKey = process.env.GLM_API_KEY;
+  if (!apiKey) throw new Error("GLM_API_KEY is missing");
+
+  const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
     },
+    body: JSON.stringify({
+      model: "glm-4.5-flash",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "请提取图片中的所有英文单词和中文短语。每行一个。只需返回提取出的文字内容，不要包含任何额外说明或页码。"
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Data}`
+              }
+            }
+          ]
+        }
+      ]
+    })
   });
 
-  const rawText = response.text || "";
-  return rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `GLM API Error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices[0]?.message?.content || "";
+  return content.split('\n').map((w: string) => w.trim()).filter((w: string) => w.length > 0);
 };
