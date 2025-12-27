@@ -1,4 +1,6 @@
 
+import { GoogleGenAI } from "@google/genai";
+
 export const config = {
   runtime: 'edge',
 };
@@ -14,81 +16,69 @@ export default async function handler(req: Request) {
   try {
     const body = await req.json();
     const { image, type } = body;
-    const apiKey = process.env.GLM_API_KEY;
+    
+    // As per user request, using GEM_API_KEY instead of the standard API_KEY
+    const apiKey = process.env.GEM_API_KEY;
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'GLM_API_KEY not configured on server' }), { 
+      return new Response(JSON.stringify({ error: 'GEM_API_KEY not configured on server' }), { 
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    const endpoint = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+    const ai = new GoogleGenAI({ apiKey });
+    const model = 'gemini-3-flash-preview';
 
     // Diagnostic Connectivity Test
     if (type === 'test') {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: "glm-4.5-flash",
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 10
-        })
+      const response = await ai.models.generateContent({
+        model,
+        contents: 'ping',
       });
 
-      const data = await response.json();
       return new Response(JSON.stringify({ 
-        success: response.ok, 
-        status: response.status,
-        data: data 
+        success: !!response.text, 
+        message: "Gemini API handshake successful"
       }), { 
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Standard OCR Extraction
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+    // Standard OCR Extraction using Gemini Vision
+    const imagePart = {
+      inlineData: {
+        mimeType: 'image/jpeg',
+        data: image, // Base64 string
       },
-      body: JSON.stringify({
-        model: "glm-4.5-flash",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } },
-              { 
-                type: "text", 
-                text: "Extract only English and Chinese words/phrases from the image. List them one per line. Strictly exclude any numbers, page numbers, dates, or non-textual symbols. Return ONLY the words themselves." 
-              }
-            ]
-          }
-        ]
-      })
+    };
+
+    const promptPart = {
+      text: "Extract only English and Chinese words/phrases from the image. List them one per line. Strictly exclude any numbers, page numbers, dates, or non-textual symbols. Return ONLY the words themselves."
+    };
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: { parts: [imagePart, promptPart] },
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      return new Response(JSON.stringify(data), { 
-        status: response.status,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    return new Response(JSON.stringify(data), { 
+    const text = response.text || "";
+    
+    // Gemini returns text directly. We wrap it in a structure compatible with the frontend expectation.
+    return new Response(JSON.stringify({
+      choices: [{
+        message: {
+          content: text
+        }
+      }]
+    }), { 
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (error: any) {
+    console.error('Gemini API Error:', error);
     return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), { 
       status: 500,
       headers: { 'Content-Type': 'application/json' }

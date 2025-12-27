@@ -55,7 +55,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
   const runApiTest = async () => {
     setIsTestingApi(true);
-    addLog('info', '启动 GLM 接口代理自检 (glm-4.5-flash)...');
+    addLog('info', '启动 Gemini 接口代理自检 (gemini-3-flash-preview)...');
     const result = await testGeminiConnectivity();
     setApiStatus(result);
     if (result.success) addLog('success', `接口自检正常 (${result.latency}ms)`);
@@ -66,7 +66,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   const runVisionDiagnosis = async () => {
     setIsTestingVision(true);
     setVisionSteps([]);
-    addLog('info', '启动 GLM 视觉代理分步诊断...');
+    addLog('info', '启动 Gemini 视觉代理分步诊断...');
     
     await diagnoseVisionProcess((stepName, status, details) => {
       setVisionSteps(prev => {
@@ -110,7 +110,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
             <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg"><ShieldCheck className="w-6 h-6 text-white" /></div>
             <div>
               <h2 className="font-black text-slate-900 text-lg uppercase tracking-tight">系统诊断中心</h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">LingoEcho Diagnostic Suite v2.5</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">LingoEcho Diagnostic Suite v2.6</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-6 h-6 text-slate-500" /></button>
@@ -118,8 +118,8 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
         {/* Tab switcher */}
         <div className="flex px-8 border-b bg-white shrink-0 overflow-x-auto no-scrollbar">
-          <button onClick={() => setActiveTab('api')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>API 核心代理</button>
-          <button onClick={() => setActiveTab('vision')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'vision' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>视觉诊断 (GLM-4.5)</button>
+          <button onClick={() => setActiveTab('api')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Gemini 核心代理</button>
+          <button onClick={() => setActiveTab('vision')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'vision' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>视觉诊断 (Gemini Vision)</button>
           <button onClick={() => setActiveTab('tts')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'tts' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>语音合成实验室</button>
           <button onClick={() => setActiveTab('env')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'env' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>运行环境</button>
         </div>
@@ -132,9 +132,9 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
                   <div className="flex items-center gap-3">
                     <Globe className="w-5 h-5 text-indigo-500" />
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Vercel Proxy 连通性</h3>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Vercel Proxy (Gemini) 连通性</h3>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">此测试验证前端是否能正确调用后端的 /api/ocr 代理，以及后端是否能成功握手 GLM 平台。</p>
+                  <p className="text-xs text-slate-500 leading-relaxed">此测试验证前端是否能正确调用后端的 /api/ocr 代理，以及后端是否能成功通过 GEM_API_KEY 握手 Google Gemini 平台。</p>
                   <button onClick={runApiTest} disabled={isTestingApi} className="w-full py-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-xs uppercase tracking-widest hover:border-indigo-500 hover:text-indigo-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
                     {isTestingApi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />} 
                     启动 API 代理自检
@@ -161,7 +161,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Camera className="w-5 h-5 text-indigo-500" />
-                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">GLM 视觉代理分步排查</h3>
+                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Gemini 视觉代理分步排查</h3>
                     </div>
                     <button onClick={runVisionDiagnosis} disabled={isTestingVision} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 transition-all flex items-center gap-2">
                       {isTestingVision ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
@@ -173,7 +173,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                     {visionSteps.length === 0 ? (
                       <div className="py-12 text-center text-slate-400">
                         <Info className="w-10 h-10 mx-auto opacity-20 mb-3" />
-                        <p className="text-[10px] font-bold uppercase tracking-widest">点击按钮测试通过代理进行视觉分析的链路 (GLM-4.5-Flash)</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest">点击按钮测试通过代理进行视觉分析的链路 (Gemini-3-Flash)</p>
                       </div>
                     ) : (
                       visionSteps.map((step, i) => (

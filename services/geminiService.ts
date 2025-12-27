@@ -19,7 +19,7 @@ const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 let currentAudio: HTMLAudioElement | null = null;
 
 /**
- * 验证 API 连通性 (通过 Vercel Proxy)
+ * 验证 API 连通性 (通过 Vercel Proxy 转发至 Gemini)
  */
 export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
   const start = Date.now();
@@ -34,7 +34,7 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
     const data = await response.json();
     
     if (response.ok && data.success) {
-      return { success: true, message: "GLM API 连接成功 (经由代理)", latency };
+      return { success: true, message: "Gemini API 连接成功 (经由代理)", latency };
     }
     throw new Error(data.error || "代理服务器返回异常");
   } catch (error: any) {
@@ -283,7 +283,7 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
 };
 
 /**
- * OCR 提取 (通过 Vercel Proxy)
+ * OCR 提取 (通过 Vercel Proxy 转发至 Gemini)
  */
 export const extractWordsFromImage = async (base64Data: string, returnRaw = false): Promise<string[] | { raw: string, cleaned: string[] }> => {
   try {
@@ -298,7 +298,7 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error?.message || "代理服务 OCR 失败");
+      throw new Error(data.error || "代理服务 OCR 失败");
     }
 
     const rawText = data.choices?.[0]?.message?.content || "";
@@ -320,7 +320,7 @@ export const extractWordsFromImage = async (base64Data: string, returnRaw = fals
 export const diagnoseVisionProcess = async (onProgress: (step: string, status: 'loading' | 'success' | 'error', details?: string) => void) => {
   const start = Date.now();
   try {
-    onProgress('Proxy Handshake', 'loading', 'Testing Vercel API Route...');
+    onProgress('Proxy Handshake', 'loading', 'Testing Vercel API Route (Gemini)...');
     const res = await fetch(PROXY_OCR_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
