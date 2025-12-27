@@ -14,9 +14,10 @@ export default async function handler(req: Request) {
   }
 
   try {
-    const apiKey = process.env.API_KEY;
+    // 根据用户要求，使用 GEN_API_KEY 环境变量
+    const apiKey = process.env.GEN_API_KEY || process.env.API_KEY;
     if (!apiKey) {
-      throw new Error('服务器未配置 API_KEY 环境参数');
+      throw new Error('服务器未配置 GEN_API_KEY 环境参数');
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -64,7 +65,6 @@ export default async function handler(req: Request) {
 
     const resultText = response.text || "";
     
-    // 返回给前端的结构，保持原有的 choices 结构以兼容现有代码，或直接返回数据
     return new Response(JSON.stringify({
       success: true,
       choices: [{
