@@ -7,69 +7,69 @@ export const config = {
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: '仅支持 POST 请求' }), { 
+    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { 
       status: 405,
       headers: { 'Content-Type': 'application/json' }
     });
   }
 
   try {
-    // 根据用户要求，使用 GEN_API_KEY 环境变量
-    const apiKey = process.env.GEN_API_KEY || process.env.API_KEY;
+    const body = await req.json();
+    const { image, type } = body;
+    
+    // As per user request, using GEM_API_KEY instead of the standard API_KEY
+    const apiKey = process.env.GEM_API_KEY;
+
     if (!apiKey) {
-      throw new Error('服务器未配置 GEN_API_KEY 环境参数');
+      return new Response(JSON.stringify({ error: 'GEM_API_KEY not configured on server' }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    const body = await req.json();
-    const { image, type } = body;
-    const modelName = 'gemini-3-flash-preview';
+    const model = 'gemini-3-flash-preview';
 
-    // 诊断测试：简单的握手
+    // Diagnostic Connectivity Test
     if (type === 'test') {
       const response = await ai.models.generateContent({
-        model: modelName,
-        contents: 'Hello',
+        model,
+        contents: 'ping',
       });
+
       return new Response(JSON.stringify({ 
-        success: true, 
-        message: "Gemini API 握手成功",
-        text: response.text
+        success: !!response.text, 
+        message: "Gemini API handshake successful"
       }), { 
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // OCR 图像处理
-    if (!image) {
-      throw new Error('未提供有效的图像数据');
-    }
+    // Standard OCR Extraction using Gemini Vision
+    const imagePart = {
+      inlineData: {
+        mimeType: 'image/jpeg',
+        data: image, // Base64 string
+      },
+    };
+
+    const promptPart = {
+      text: "Extract only English and Chinese words/phrases from the image. List them one per line. Strictly exclude any numbers, page numbers, dates, or non-textual symbols. Return ONLY the words themselves."
+    };
 
     const response = await ai.models.generateContent({
-      model: modelName,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: image, // base64 字符串
-            },
-          },
-          {
-            text: "请提取图片中所有的英文单词和中文词汇。每行只输出一个单词或短语。不要输出数字、页码、标点符号或任何多余的解释。只返回单词列表。"
-          }
-        ]
-      },
+      model,
+      contents: { parts: [imagePart, promptPart] },
     });
 
-    const resultText = response.text || "";
+    const text = response.text || "";
     
+    // Gemini returns text directly. We wrap it in a structure compatible with the frontend expectation.
     return new Response(JSON.stringify({
-      success: true,
       choices: [{
         message: {
-          content: resultText
+          content: text
         }
       }]
     }), { 
@@ -78,11 +78,8 @@ export default async function handler(req: Request) {
     });
 
   } catch (error: any) {
-    console.error('OCR Proxy Error:', error);
-    return new Response(JSON.stringify({ 
-      success: false,
-      error: error.message || '内部服务器错误' 
-    }), { 
+    console.error('Gemini API Error:', error);
+    return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), { 
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
