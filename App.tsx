@@ -32,8 +32,8 @@ const App: React.FC = () => {
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
   
-  // OCR 语种选择状态：默认选中中文
-  const [ocrLangs, setOcrLangs] = useState<{ zh: boolean, en: boolean }>({ zh: true, en: false });
+  // OCR 语种选择状态：默认选中中文和英文
+  const [ocrLangs, setOcrLangs] = useState<{ zh: boolean, en: boolean }>({ zh: true, en: true });
 
   const recognitionRef = useRef<any>(null);
   const manualStopRef = useRef(false);

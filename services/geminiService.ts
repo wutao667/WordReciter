@@ -211,7 +211,26 @@ export const extractWordsFromImage = async (
     });
 
     const rawText = data.choices?.[0]?.message?.content || "";
-    const words = rawText.split('\n').map((w: string) => w.replace(/[0-9]/g, '').trim()).filter((w: string) => w.length > 0);
+    
+    // 噪声过滤器逻辑
+    const noisePatterns = [
+      /不包含/i, /没找到/i, /没有发现/i, /图中没有/i, /无法提取/i, /无目标/i,
+      /no words/i, /not found/i, /doesn't contain/i, /does not contain/i, /no chinese/i, /no english/i
+    ];
+
+    const words = rawText.split('\n')
+      .map((w: string) => w.trim())
+      .filter((w: string) => {
+        if (!w) return false;
+        // 1. 过滤掉包含特定噪声模式的行
+        if (noisePatterns.some(pattern => pattern.test(w))) return false;
+        // 2. 过滤掉句子式的回复（单词通常不包含句末标点且长度适中）
+        if (w.length > 20 && /[。！？.!?]$/.test(w)) return false;
+        return true;
+      })
+      .map((w: string) => w.replace(/[0-9]/g, '').trim()) // 移除页码等数字干扰
+      .filter((w: string) => w.length > 0);
+
     return returnRaw ? { raw: rawText, cleaned: words } : words;
   } catch (error: any) {
     throw new Error(error.message || "图像解析失败");

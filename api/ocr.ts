@@ -15,7 +15,7 @@ export default async function handler(req: Request) {
 
   try {
     const body = await req.json();
-    const { image, type, languages } = body; // 接收语种偏好
+    const { image, type, languages } = body; 
     
     const apiKey = process.env.GEM_API_KEY;
 
@@ -58,8 +58,8 @@ export default async function handler(req: Request) {
     if (Array.isArray(languages) && languages.length > 0) {
       const hasZh = languages.includes('zh');
       const hasEn = languages.includes('en');
-      if (hasZh && !hasEn) langInstruction = "中文词汇（忽略所有英文单词）";
-      else if (hasEn && !hasZh) langInstruction = "英文单词（忽略所有中文词汇）";
+      if (hasZh && !hasEn) langInstruction = "中文词汇（忽略并完全不输出任何英文单词）";
+      else if (hasEn && !hasZh) langInstruction = "英文单词（忽略并完全不输出任何中文词汇）";
     }
 
     const response = await ai.models.generateContent({
@@ -73,7 +73,14 @@ export default async function handler(req: Request) {
         }],
       },
       config: {
-        systemInstruction: `你是一个专业的 OCR 插件。请提取图片中所有的${langInstruction}。每行只输出一个单词或短语。不要输出数字、页码、标点符号、Markdown 格式或任何多余的解释。只返回纯文本列表。`,
+        systemInstruction: `你是一个专业的 OCR 插件。请提取图片中所有的${langInstruction}。每行只输出一个单词或短语。
+        
+【强制规则】：
+1. 只输出单词列表，每行一个。
+2. 严禁输出任何解释、道歉、描述或对话。
+3. 如果图中没有符合条件的词汇，请直接返回一个完全为空的字符串。
+4. 严禁出现“图片中不包含...”、“没找到...”、“图中没有...”等任何类似的说明文字。
+5. 忽略数字、标点、Markdown 格式。`,
         thinkingConfig: { thinkingBudget: 0 }, 
       },
     });
