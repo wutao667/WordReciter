@@ -17,11 +17,11 @@ export default async function handler(req: Request) {
     const body = await req.json();
     const { image, type } = body;
     
-    // As per user request, using GEM_API_KEY instead of the standard API_KEY
+    // 遵循用户要求：使用 GEM_API_KEY
     const apiKey = process.env.GEM_API_KEY;
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'GEM_API_KEY not configured on server' }), { 
+      return new Response(JSON.stringify({ error: '环境变量 GEM_API_KEY 未配置' }), { 
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -30,7 +30,7 @@ export default async function handler(req: Request) {
     const ai = new GoogleGenAI({ apiKey });
     const model = 'gemini-3-flash-preview';
 
-    // Diagnostic Connectivity Test
+    // 诊断性连接测试
     if (type === 'test') {
       const response = await ai.models.generateContent({
         model,
@@ -39,23 +39,27 @@ export default async function handler(req: Request) {
 
       return new Response(JSON.stringify({ 
         success: !!response.text, 
-        message: "Gemini API handshake successful"
+        message: "Gemini API 握手成功"
       }), { 
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Standard OCR Extraction using Gemini Vision
+    // 图片解析逻辑
+    if (!image) {
+       throw new Error("未接收到图像数据 (image base64 is missing)");
+    }
+
     const imagePart = {
       inlineData: {
         mimeType: 'image/jpeg',
-        data: image, // Base64 string
+        data: image, // Base64 字符串
       },
     };
 
     const promptPart = {
-      text: "Extract only English and Chinese words/phrases from the image. List them one per line. Strictly exclude any numbers, page numbers, dates, or non-textual symbols. Return ONLY the words themselves."
+      text: "请提取图片中所有的英文单词和中文词汇。每行只输出一个单词或短语。不要输出数字、页码、标点符号或任何多余的解释。只返回单词列表。"
     };
 
     const response = await ai.models.generateContent({
@@ -65,8 +69,8 @@ export default async function handler(req: Request) {
 
     const text = response.text || "";
     
-    // Gemini returns text directly. We wrap it in a structure compatible with the frontend expectation.
     return new Response(JSON.stringify({
+      success: true,
       choices: [{
         message: {
           content: text
@@ -79,7 +83,11 @@ export default async function handler(req: Request) {
 
   } catch (error: any) {
     console.error('Gemini API Error:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), { 
+    // 确保错误响应也是 JSON
+    return new Response(JSON.stringify({ 
+      success: false,
+      error: error.message || '内部服务器错误' 
+    }), { 
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
