@@ -19,6 +19,42 @@ const AZURE_TTS_ENDPOINT = `https://${AZURE_REGION}.tts.speech.microsoft.com/cog
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 
 /**
+ * Connectivity Test for GLM (BigModel API)
+ */
+export const testGLMConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {
+  const start = Date.now();
+  try {
+    const apiKey = process.env.GLM_API_KEY;
+    if (!apiKey) throw new Error("GLM_API_KEY is missing");
+
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: "glm-4.5-flash",
+        messages: [{ role: "user", content: "hi" }],
+        max_tokens: 5
+      })
+    });
+
+    const latency = Date.now() - start;
+    if (response.ok) {
+      const data = await response.json();
+      if (data.choices?.[0]?.message) {
+        return { success: true, message: "GLM API connected successfully", latency };
+      }
+    }
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `GLM API returned status ${response.status}`);
+  } catch (error: any) {
+    return { success: false, message: error.message || "Connection failed", latency: Date.now() - start };
+  }
+};
+
+/**
  * Connectivity Test for Gemini (Core API)
  */
 export const testGeminiConnectivity = async (): Promise<{ success: boolean; message: string; latency: number }> => {

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, ShieldCheck, Trash2, Zap, Globe, Volume2, PlayCircle, Loader2, Sparkles, AlertCircle, Info, Languages, Monitor, Smartphone, MessageSquare, Terminal, Copy, CheckCircle2, Cloud, Camera, ChevronRight, Search } from 'lucide-react';
-import { testGeminiConnectivity, speakWordLocal, speakWithAzureTTS, AZURE_REGION, diagnoseVisionProcess } from '../services/geminiService';
+import { testGLMConnectivity, speakWordLocal, speakWithAzureTTS, AZURE_REGION, diagnoseVisionProcess } from '../services/geminiService';
 
 interface DebugConsoleProps {
   onClose: () => void;
@@ -55,11 +55,11 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
   const runApiTest = async () => {
     setIsTestingApi(true);
-    addLog('info', 'Starting Gemini API connectivity check...');
-    const result = await testGeminiConnectivity();
+    addLog('info', 'Starting GLM API connectivity check...');
+    const result = await testGLMConnectivity();
     setApiStatus(result);
-    if (result.success) addLog('success', `API Response OK (${result.latency}ms)`);
-    else addLog('error', `API Failure: ${result.message}`);
+    if (result.success) addLog('success', `GLM API Response OK (${result.latency}ms)`);
+    else addLog('error', `GLM API Failure: ${result.message}`);
     setIsTestingApi(false);
   };
 
@@ -138,7 +138,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
                   <div className="flex items-center gap-3">
                     <Globe className="w-5 h-5 text-indigo-500" />
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Gemini API 连通性</h3>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">GLM API 连通性</h3>
                   </div>
                   <button onClick={runApiTest} disabled={isTestingApi} className="w-full py-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-xs uppercase tracking-widest hover:border-indigo-500 hover:text-indigo-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
                     {isTestingApi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />} 
