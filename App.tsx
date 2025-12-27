@@ -5,7 +5,7 @@ import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
 import DebugConsole from './components/DebugConsole';
 import { extractWordsFromImage } from './services/geminiService';
-import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal, Info, ZapOff } from 'lucide-react';
 
 interface AnalysisStep {
   id: string;
@@ -42,12 +42,12 @@ const App: React.FC = () => {
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   const initialSteps: AnalysisStep[] = [
-    { id: '1', name: "图像读取与预处理", status: 'pending' },
-    { id: '2', name: "建立 Gemini 安全连接", status: 'pending' },
-    { id: '3', name: "Gemini 3.0 视觉解析", status: 'pending' },
-    { id: '4', name: "英文字符与词块识别", status: 'pending' },
-    { id: '5', name: "语义校对与去重", status: 'pending' },
-    { id: '6', name: "同步至单词明细列表", status: 'pending' }
+    { id: '1', name: "图像读取与预处理", status: 'pending', details: "准备处理原始数据..." },
+    { id: '2', name: "图像动态压缩优化", status: 'pending', details: "降低带宽压力中..." },
+    { id: '3', name: "API 代理握手", status: 'pending', details: "连接 Vercel Edge Server..." },
+    { id: '4', name: "Gemini 3.0 Vision 建模", status: 'pending', details: "AI 视觉引擎启动中..." },
+    { id: '5', name: "OCR 文本流解析", status: 'pending', details: "检测单词边界与语种..." },
+    { id: '6', name: "语义校对与去重", status: 'pending', details: "过滤非文本噪声数据..." }
   ];
 
   useEffect(() => {
@@ -171,62 +171,103 @@ const App: React.FC = () => {
     try { rec.start(); } catch (e) {}
   };
 
+  /**
+   * 图片压缩核心逻辑
+   */
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<{ base64: string, size: number }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = (maxWidth / width) * height;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error("Canvas context failed"));
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        const base64 = canvas.toDataURL('image/jpeg', quality);
+        // 计算压缩后的体积 (Base64体积大约是二进制的 4/3)
+        const compressedSize = Math.round((base64.length * 3) / 4);
+        resolve({ base64: base64.split(',')[1], size: compressedSize });
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = reject;
+    });
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsAnalyzing(true);
     setErrorMsg(null);
-    // 初始显示第一步加载
-    setAnalysisLogs(initialSteps.map((step, i) => i === 0 ? { ...step, status: 'loading' } : step));
     
-    let currentStepIdx = 0;
+    // 初始化日志
+    const originalSizeKb = Math.round(file.size / 1024);
+    setAnalysisLogs(initialSteps.map((s, i) => i === 0 ? { ...s, status: 'loading', details: `加载文件: ${file.name} (${originalSizeKb}KB)` } : s));
     
-    // 自动步进逻辑
-    logIntervalRef.current = setInterval(() => {
-      setAnalysisLogs(prev => {
-        const next = [...prev];
-        // 只有当前步骤还在加载且没到最后一步时才自动推进一步
-        if (currentStepIdx < next.length - 2) { 
-          next[currentStepIdx] = { ...next[currentStepIdx], status: 'success' };
-          currentStepIdx++;
-          next[currentStepIdx] = { ...next[currentStepIdx], status: 'loading' };
-        }
-        return next;
-      });
-    }, 1200);
-
     try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        
-        // 真实 API 调用
-        const extractedResult = await extractWordsFromImage(base64);
-        const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
+      // 步骤 1: 压缩
+      setAnalysisLogs(prev => prev.map((s, i) => i === 0 ? { ...s, status: 'success', details: '读取成功' } : i === 1 ? { ...s, status: 'loading' } : s));
+      const { base64, size: compressedSize } = await compressImage(file);
+      const compressedSizeKb = Math.round(compressedSize / 1024);
+      
+      setAnalysisLogs(prev => prev.map((s, i) => 
+        i === 1 ? { ...s, status: 'success', details: `优化完成: ${originalSizeKb}KB -> ${compressedSizeKb}KB` } : 
+        i === 2 ? { ...s, status: 'loading' } : s
+      ));
 
-        if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+      // 后续步进逻辑（模拟剩余流水线直到 API 返回）
+      let currentStepIdx = 2;
+      const logDetails = [
+        "", "", "Edge 路由连接成功", "AI 特征分析中...", "正在扫描文本...", "正在同步结果..."
+      ];
+      
+      logIntervalRef.current = setInterval(() => {
+        setAnalysisLogs(prev => {
+          const next = [...prev];
+          if (currentStepIdx < next.length - 1) { 
+            next[currentStepIdx] = { ...next[currentStepIdx], status: 'success', details: logDetails[currentStepIdx] };
+            currentStepIdx++;
+            next[currentStepIdx] = { ...next[currentStepIdx], status: 'loading', details: "进行中..." };
+          }
+          return next;
+        });
+      }, 1200);
 
-        if (words.length > 0) {
-          setWordsInput(prev => {
-            const newContent = words.join('\n');
-            return prev.trim() ? `${prev}\n${newContent}` : newContent;
-          });
-          // 全部标记为成功
-          setAnalysisLogs(prev => prev.map(s => ({ ...s, status: 'success' })));
-        } else {
-          setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error', details: '未识别到有效词汇' } : s));
-          setErrorMsg("未在图片中检测到单词");
-        }
-        
+      // 调用真实的 API
+      const extractedResult = await extractWordsFromImage(base64);
+      const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
+
+      if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+
+      if (words.length > 0) {
+        setWordsInput(prev => {
+          const newContent = words.join('\n');
+          return prev.trim() ? `${prev}\n${newContent}` : newContent;
+        });
+        setAnalysisLogs(prev => prev.map((s, i) => ({ ...s, status: 'success', details: logDetails[i] || s.details })));
         setTimeout(() => setIsAnalyzing(false), 1000);
-      };
-      reader.readAsDataURL(file);
+      } else {
+        setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error', details: '未识别到单词' } : s));
+        setErrorMsg("未在图片中检测到单词");
+        setTimeout(() => setIsAnalyzing(false), 2000);
+      }
+      
     } catch (err: any) {
       if (logIntervalRef.current) clearInterval(logIntervalRef.current);
       setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error', details: err.message } : s));
       setErrorMsg(err.message || "图像解析失败");
-      setTimeout(() => setIsAnalyzing(false), 2000);
+      setTimeout(() => setIsAnalyzing(false), 2500);
     }
   };
 
@@ -366,11 +407,10 @@ const App: React.FC = () => {
                         className="w-full h-full min-h-[200px] md:min-h-full px-6 py-6 rounded-3xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all resize-none shadow-inner leading-relaxed" 
                       />
                       
-                      {/* 加载遮罩与分步日志 */}
                       {isAnalyzing && (
                         <div className="absolute inset-0 bg-white/95 backdrop-blur-xl rounded-3xl flex flex-col p-6 sm:p-10 animate-in fade-in duration-500 z-20 border-2 border-indigo-500/10 overflow-hidden">
-                          {/* 顶部加载环 */}
-                          <div className="text-center space-y-3 mb-10">
+                          {/* Top Heading */}
+                          <div className="text-center space-y-3 mb-8 shrink-0">
                             <div className="relative inline-block">
                               <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse" />
                               <Loader2 className="w-12 h-12 text-indigo-600 animate-spin relative z-10 mx-auto" />
@@ -381,18 +421,21 @@ const App: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* 识别流水线日志 - 对标诊断界面 */}
+                          {/* 诊断级流水线日志 */}
                           <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pb-4">
-                            <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
-                              <Terminal className="w-4 h-4 text-slate-400" />
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">识别引擎流水线</span>
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4">
+                              <div className="flex items-center gap-2">
+                                <Terminal className="w-4 h-4 text-slate-400" />
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">识别引擎诊断流水线</span>
+                              </div>
                             </div>
+                            
                             {analysisLogs.map((log, i) => (
                               <div key={log.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-500 animate-in slide-in-from-bottom-2 ${
                                 log.status === 'success' ? 'bg-emerald-50 border-emerald-100' : 
                                 log.status === 'loading' ? 'bg-indigo-50 border-indigo-200' : 
                                 log.status === 'error' ? 'bg-red-50 border-red-100' : 'bg-slate-50/50 border-transparent opacity-40'
-                              }`} style={{ animationDelay: `${i * 100}ms` }}>
+                              }`} style={{ animationDelay: `${i * 80}ms` }}>
                                 <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                                   log.status === 'success' ? 'bg-emerald-500 text-white' : 
                                   log.status === 'loading' ? 'bg-indigo-500 text-white animate-pulse' : 
@@ -403,11 +446,16 @@ const App: React.FC = () => {
                                    log.status === 'error' ? <AlertCircle className="w-4 h-4" /> : <div className="w-2 h-2 bg-current rounded-full" />}
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                  <span className={`text-[10px] font-black uppercase tracking-widest block ${
-                                    log.status === 'loading' ? 'text-indigo-900' : 
-                                    log.status === 'error' ? 'text-red-900' : 'text-slate-600'
-                                  }`}>{log.name}</span>
-                                  {log.details && <p className="text-[9px] text-red-500 mt-0.5 font-bold italic truncate">{log.details}</p>}
+                                  <div className="flex justify-between items-center mb-0.5">
+                                    <span className={`text-[10px] font-black uppercase tracking-widest ${
+                                      log.status === 'loading' ? 'text-indigo-900' : 
+                                      log.status === 'error' ? 'text-red-900' : 'text-slate-600'
+                                    }`}>{log.name}</span>
+                                    {log.status === 'success' && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100 px-1.5 rounded-md">OK</span>}
+                                  </div>
+                                  <p className={`text-[9px] truncate ${
+                                    log.status === 'error' ? 'text-red-500 font-bold italic' : 'text-slate-400 italic'
+                                  }`}>{log.details || '等待任务开始...'}</p>
                                 </div>
                               </div>
                             ))}
