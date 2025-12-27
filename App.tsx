@@ -8,8 +8,10 @@ import { extractWordsFromImage } from './services/geminiService';
 import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal } from 'lucide-react';
 
 interface AnalysisStep {
+  id: string;
   name: string;
   status: 'pending' | 'loading' | 'success' | 'error';
+  details?: string;
 }
 
 const App: React.FC = () => {
@@ -40,12 +42,12 @@ const App: React.FC = () => {
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   const initialSteps: AnalysisStep[] = [
-    { name: "图像预处理与对齐", status: 'pending' },
-    { name: "建立 Gemini 安全连接", status: 'pending' },
-    { name: "Gemini 3.0 视觉模型解析", status: 'pending' },
-    { name: "英文字符与词块识别", status: 'pending' },
-    { name: "语义校对与去重", status: 'pending' },
-    { name: "整理核心词汇列表", status: 'pending' }
+    { id: '1', name: "图像读取与预处理", status: 'pending' },
+    { id: '2', name: "建立 Gemini 安全连接", status: 'pending' },
+    { id: '3', name: "Gemini 3.0 视觉解析", status: 'pending' },
+    { id: '4', name: "英文字符与词块识别", status: 'pending' },
+    { id: '5', name: "语义校对与去重", status: 'pending' },
+    { id: '6', name: "同步至单词明细列表", status: 'pending' }
   ];
 
   useEffect(() => {
@@ -175,50 +177,54 @@ const App: React.FC = () => {
 
     setIsAnalyzing(true);
     setErrorMsg(null);
+    // 初始显示第一步加载
     setAnalysisLogs(initialSteps.map((step, i) => i === 0 ? { ...step, status: 'loading' } : step));
     
     let currentStepIdx = 0;
+    
+    // 自动步进逻辑
     logIntervalRef.current = setInterval(() => {
       setAnalysisLogs(prev => {
-        if (currentStepIdx >= initialSteps.length - 1) {
-          if (logIntervalRef.current) clearInterval(logIntervalRef.current);
-          return prev;
-        }
         const next = [...prev];
-        next[currentStepIdx] = { ...next[currentStepIdx], status: 'success' };
-        currentStepIdx++;
-        next[currentStepIdx] = { ...next[currentStepIdx], status: 'loading' };
+        // 只有当前步骤还在加载且没到最后一步时才自动推进一步
+        if (currentStepIdx < next.length - 2) { 
+          next[currentStepIdx] = { ...next[currentStepIdx], status: 'success' };
+          currentStepIdx++;
+          next[currentStepIdx] = { ...next[currentStepIdx], status: 'loading' };
+        }
         return next;
       });
-    }, 1500);
+    }, 1200);
 
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const extractedResult = await extractWordsFromImage(base64);
         
+        // 真实 API 调用
+        const extractedResult = await extractWordsFromImage(base64);
         const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
+
+        if (logIntervalRef.current) clearInterval(logIntervalRef.current);
 
         if (words.length > 0) {
           setWordsInput(prev => {
             const newContent = words.join('\n');
             return prev.trim() ? `${prev}\n${newContent}` : newContent;
           });
+          // 全部标记为成功
+          setAnalysisLogs(prev => prev.map(s => ({ ...s, status: 'success' })));
         } else {
+          setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error', details: '未识别到有效词汇' } : s));
           setErrorMsg("未在图片中检测到单词");
         }
         
-        if (logIntervalRef.current) clearInterval(logIntervalRef.current);
-        setAnalysisLogs(prev => prev.map(s => ({ ...s, status: 'success' })));
-        
-        // 留一点时间显示全部完成
-        setTimeout(() => setIsAnalyzing(false), 800);
+        setTimeout(() => setIsAnalyzing(false), 1000);
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
       if (logIntervalRef.current) clearInterval(logIntervalRef.current);
-      setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error' } : s));
+      setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error', details: err.message } : s));
       setErrorMsg(err.message || "图像解析失败");
       setTimeout(() => setIsAnalyzing(false), 2000);
     }
@@ -360,43 +366,49 @@ const App: React.FC = () => {
                         className="w-full h-full min-h-[200px] md:min-h-full px-6 py-6 rounded-3xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all resize-none shadow-inner leading-relaxed" 
                       />
                       
+                      {/* 加载遮罩与分步日志 */}
                       {isAnalyzing && (
-                        <div className="absolute inset-0 bg-white/95 backdrop-blur-xl rounded-3xl flex flex-col p-8 animate-in fade-in duration-500 z-20 border-2 border-indigo-500/10 overflow-hidden">
-                          {/* Top Heading */}
-                          <div className="text-center space-y-3 mb-8">
+                        <div className="absolute inset-0 bg-white/95 backdrop-blur-xl rounded-3xl flex flex-col p-6 sm:p-10 animate-in fade-in duration-500 z-20 border-2 border-indigo-500/10 overflow-hidden">
+                          {/* 顶部加载环 */}
+                          <div className="text-center space-y-3 mb-10">
                             <div className="relative inline-block">
                               <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse" />
-                              <Loader2 className="w-10 h-10 text-indigo-600 animate-spin relative z-10 mx-auto" />
+                              <Loader2 className="w-12 h-12 text-indigo-600 animate-spin relative z-10 mx-auto" />
                             </div>
-                            <h3 className="text-sm font-black text-slate-900 leading-tight">AI分析中，请耐心等待<br/>大约需要 10 秒钟</h3>
-                            <div className="w-48 h-1 bg-slate-100 rounded-full mx-auto overflow-hidden">
+                            <h3 className="text-sm font-black text-slate-900 leading-tight">AI 分析中，请耐心等待<br/>大约需要 10 秒钟</h3>
+                            <div className="w-48 h-1 bg-slate-100 rounded-full mx-auto overflow-hidden mt-4">
                               <div className="h-full bg-indigo-600 animate-progress-indefinite rounded-full" />
                             </div>
                           </div>
 
-                          {/* Log-style Steps */}
-                          <div className="flex-1 space-y-2.5 overflow-y-auto no-scrollbar">
-                            <div className="flex items-center gap-2 mb-4">
-                              <Terminal className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">识别流水线日志</span>
+                          {/* 识别流水线日志 - 对标诊断界面 */}
+                          <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pb-4">
+                            <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
+                              <Terminal className="w-4 h-4 text-slate-400" />
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">识别引擎流水线</span>
                             </div>
                             {analysisLogs.map((log, i) => (
-                              <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 ${
+                              <div key={log.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-500 animate-in slide-in-from-bottom-2 ${
                                 log.status === 'success' ? 'bg-emerald-50 border-emerald-100' : 
-                                log.status === 'loading' ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent opacity-40'
-                              }`}>
-                                <div className={`shrink-0 ${
-                                  log.status === 'success' ? 'text-emerald-500' : 
-                                  log.status === 'loading' ? 'text-indigo-500' : 
-                                  log.status === 'error' ? 'text-red-500' : 'text-slate-300'
+                                log.status === 'loading' ? 'bg-indigo-50 border-indigo-200' : 
+                                log.status === 'error' ? 'bg-red-50 border-red-100' : 'bg-slate-50/50 border-transparent opacity-40'
+                              }`} style={{ animationDelay: `${i * 100}ms` }}>
+                                <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                                  log.status === 'success' ? 'bg-emerald-500 text-white' : 
+                                  log.status === 'loading' ? 'bg-indigo-500 text-white animate-pulse' : 
+                                  log.status === 'error' ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-400'
                                 }`}>
                                   {log.status === 'success' ? <CheckCircle2 className="w-4 h-4" /> : 
                                    log.status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 
-                                   log.status === 'error' ? <AlertCircle className="w-4 h-4" /> : <div className="w-1.5 h-1.5 bg-current rounded-full mx-1.5" />}
+                                   log.status === 'error' ? <AlertCircle className="w-4 h-4" /> : <div className="w-2 h-2 bg-current rounded-full" />}
                                 </div>
-                                <span className={`text-[10px] font-bold uppercase tracking-widest ${
-                                  log.status === 'loading' ? 'text-indigo-900' : 'text-slate-600'
-                                }`}>{log.name}</span>
+                                <div className="flex-1 overflow-hidden">
+                                  <span className={`text-[10px] font-black uppercase tracking-widest block ${
+                                    log.status === 'loading' ? 'text-indigo-900' : 
+                                    log.status === 'error' ? 'text-red-900' : 'text-slate-600'
+                                  }`}>{log.name}</span>
+                                  {log.details && <p className="text-[9px] text-red-500 mt-0.5 font-bold italic truncate">{log.details}</p>}
+                                </div>
                               </div>
                             ))}
                           </div>
