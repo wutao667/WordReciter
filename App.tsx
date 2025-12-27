@@ -5,7 +5,12 @@ import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
 import DebugConsole from './components/DebugConsole';
 import { extractWordsFromImage } from './services/geminiService';
-import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal } from 'lucide-react';
+
+interface AnalysisStep {
+  name: string;
+  status: 'pending' | 'loading' | 'success' | 'error';
+}
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
@@ -18,7 +23,7 @@ const App: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [listeningLang, setListeningLang] = useState<'en-US' | 'zh-CN'>('en-US');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisStatus, setAnalysisStatus] = useState('准备上传...');
+  const [analysisLogs, setAnalysisLogs] = useState<AnalysisStep[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
@@ -30,18 +35,17 @@ const App: React.FC = () => {
   const pendingLangRef = useRef<'en-US' | 'zh-CN' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  const analysisSteps = [
-    "正在对齐图像...",
-    "建立 Gemini 安全连接...",
-    "Gemini 视觉模型正在解析...",
-    "正在识别英文字符...",
-    "正在提取中文翻译...",
-    "整理核心词汇列表...",
-    "即将完成..."
+  const initialSteps: AnalysisStep[] = [
+    { name: "图像预处理与对齐", status: 'pending' },
+    { name: "建立 Gemini 安全连接", status: 'pending' },
+    { name: "Gemini 3.0 视觉模型解析", status: 'pending' },
+    { name: "英文字符与词块识别", status: 'pending' },
+    { name: "语义校对与去重", status: 'pending' },
+    { name: "整理核心词汇列表", status: 'pending' }
   ];
 
   useEffect(() => {
@@ -171,14 +175,22 @@ const App: React.FC = () => {
 
     setIsAnalyzing(true);
     setErrorMsg(null);
+    setAnalysisLogs(initialSteps.map((step, i) => i === 0 ? { ...step, status: 'loading' } : step));
     
-    // 启动进度文字轮转
-    let stepIdx = 0;
-    setAnalysisStatus(analysisSteps[0]);
-    statusIntervalRef.current = setInterval(() => {
-      stepIdx = (stepIdx + 1) % analysisSteps.length;
-      setAnalysisStatus(analysisSteps[stepIdx]);
-    }, 1800);
+    let currentStepIdx = 0;
+    logIntervalRef.current = setInterval(() => {
+      setAnalysisLogs(prev => {
+        if (currentStepIdx >= initialSteps.length - 1) {
+          if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+          return prev;
+        }
+        const next = [...prev];
+        next[currentStepIdx] = { ...next[currentStepIdx], status: 'success' };
+        currentStepIdx++;
+        next[currentStepIdx] = { ...next[currentStepIdx], status: 'loading' };
+        return next;
+      });
+    }, 1500);
 
     try {
       const reader = new FileReader();
@@ -197,15 +209,18 @@ const App: React.FC = () => {
           setErrorMsg("未在图片中检测到单词");
         }
         
-        // 清理状态
-        if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
-        setIsAnalyzing(false);
+        if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+        setAnalysisLogs(prev => prev.map(s => ({ ...s, status: 'success' })));
+        
+        // 留一点时间显示全部完成
+        setTimeout(() => setIsAnalyzing(false), 800);
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-      if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
+      if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+      setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error' } : s));
       setErrorMsg(err.message || "图像解析失败");
-      setIsAnalyzing(false);
+      setTimeout(() => setIsAnalyzing(false), 2000);
     }
   };
 
@@ -278,7 +293,6 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/25 backdrop-blur-md animate-in fade-in duration-300 overflow-hidden">
           <div className="bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl w-full max-w-4xl border overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[95vh]">
             
-            {/* Header - 紧凑化 */}
             <div className="px-6 py-4 sm:px-10 sm:py-6 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">词单配置</h2>
               <button onClick={() => { setIsModalOpen(false); stopListening(); }} className="text-slate-300 hover:text-red-500 transition-colors p-2">
@@ -286,12 +300,10 @@ const App: React.FC = () => {
               </button>
             </div>
             
-            {/* Form Content - 启用响应式分栏与内部滚动 */}
             <form onSubmit={handleSaveList} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 overflow-y-auto p-6 sm:p-10 custom-scrollbar">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
                   
-                  {/* 左侧栏：基本信息与录入功能 */}
                   <div className="space-y-6 sm:space-y-8">
                     <div className="space-y-3">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">词单标题</label>
@@ -337,7 +349,6 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* 右侧栏：单词列表 */}
                   <div className="flex flex-col h-full space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">单词明细 (每行一个)</label>
                     <div className="relative flex-1 group min-h-[160px] md:min-h-0">
@@ -350,21 +361,44 @@ const App: React.FC = () => {
                       />
                       
                       {isAnalyzing && (
-                        <div className="absolute inset-0 bg-white/90 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center p-8 text-center gap-6 animate-in fade-in duration-300 z-20 border-2 border-indigo-500/10">
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse" />
-                            <Loader2 className="w-12 h-12 text-indigo-600 animate-spin relative z-10" />
-                          </div>
-                          <div className="space-y-2">
-                            <h3 className="text-sm font-black text-slate-900">AI分析中，请耐心等待，大约需要10秒钟</h3>
-                            <div className="flex items-center justify-center gap-2 h-6">
-                              <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-[0.15em] animate-in fade-in slide-in-from-bottom-1 duration-500 key={analysisStatus}">
-                                {analysisStatus}
-                              </span>
+                        <div className="absolute inset-0 bg-white/95 backdrop-blur-xl rounded-3xl flex flex-col p-8 animate-in fade-in duration-500 z-20 border-2 border-indigo-500/10 overflow-hidden">
+                          {/* Top Heading */}
+                          <div className="text-center space-y-3 mb-8">
+                            <div className="relative inline-block">
+                              <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse" />
+                              <Loader2 className="w-10 h-10 text-indigo-600 animate-spin relative z-10 mx-auto" />
+                            </div>
+                            <h3 className="text-sm font-black text-slate-900 leading-tight">AI分析中，请耐心等待<br/>大约需要 10 秒钟</h3>
+                            <div className="w-48 h-1 bg-slate-100 rounded-full mx-auto overflow-hidden">
+                              <div className="h-full bg-indigo-600 animate-progress-indefinite rounded-full" />
                             </div>
                           </div>
-                          <div className="w-48 h-1 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-600 animate-progress-indefinite rounded-full" />
+
+                          {/* Log-style Steps */}
+                          <div className="flex-1 space-y-2.5 overflow-y-auto no-scrollbar">
+                            <div className="flex items-center gap-2 mb-4">
+                              <Terminal className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">识别流水线日志</span>
+                            </div>
+                            {analysisLogs.map((log, i) => (
+                              <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 ${
+                                log.status === 'success' ? 'bg-emerald-50 border-emerald-100' : 
+                                log.status === 'loading' ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent opacity-40'
+                              }`}>
+                                <div className={`shrink-0 ${
+                                  log.status === 'success' ? 'text-emerald-500' : 
+                                  log.status === 'loading' ? 'text-indigo-500' : 
+                                  log.status === 'error' ? 'text-red-500' : 'text-slate-300'
+                                }`}>
+                                  {log.status === 'success' ? <CheckCircle2 className="w-4 h-4" /> : 
+                                   log.status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 
+                                   log.status === 'error' ? <AlertCircle className="w-4 h-4" /> : <div className="w-1.5 h-1.5 bg-current rounded-full mx-1.5" />}
+                                </div>
+                                <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                                  log.status === 'loading' ? 'text-indigo-900' : 'text-slate-600'
+                                }`}>{log.name}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
@@ -373,7 +407,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Footer - 始终固定在底部 */}
               <div className="px-6 py-4 sm:px-10 sm:py-6 bg-slate-50 border-t shrink-0">
                 <button 
                   type="submit" 
