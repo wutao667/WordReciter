@@ -33,6 +33,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   const [apiStatus, setApiStatus] = useState<{success?: boolean, msg?: string, latency?: number} | null>(null);
   const [visionSteps, setVisionSteps] = useState<DiagnosisStep[]>([]);
   const [envInfo, setEnvInfo] = useState<EnvInfo | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // 视觉诊断专用：真实图片数据与统计
   const [testImageBase64, setTestImageBase64] = useState<string | null>(null);
@@ -56,6 +57,14 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     const now = new Date();
     const time = now.toLocaleTimeString('en-US', { hour12: false });
     setLogs(prev => [{ time, type, msg }, ...prev].slice(0, 50));
+  };
+
+  const copyLogs = () => {
+    const text = logs.map(l => `[${l.time}] ${l.msg}`).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   /**
@@ -333,16 +342,33 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
             )}
           </div>
 
-          <div className="w-full md:w-80 bg-slate-900 flex flex-col border-l border-slate-800">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+          {/* Logs Panel - Adjusted for mobile visibility */}
+          <div className="w-full md:w-80 bg-slate-900 flex flex-col border-l border-slate-800 min-h-[240px] md:min-h-0">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 sticky top-0 z-10">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">诊断流水</span>
-              <button onClick={() => setLogs([])} className="p-1.5 text-slate-500 hover:text-white transition-colors hover:bg-white/5 rounded-lg"><Trash2 className="w-3 h-3"/></button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={copyLogs} 
+                  title="复制所有日志"
+                  className={`p-2 transition-all rounded-lg flex items-center gap-1.5 ${copied ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                >
+                  <Copy className="w-3.5 h-3.5"/>
+                  {copied && <span className="text-[8px] font-bold uppercase tracking-tighter">COPIED</span>}
+                </button>
+                <button 
+                  onClick={() => setLogs([])} 
+                  title="清除日志"
+                  className="p-2 text-slate-500 hover:text-red-400 transition-colors hover:bg-white/5 rounded-lg"
+                >
+                  <Trash2 className="w-3.5 h-3.5"/>
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 font-mono text-[9px] space-y-2 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 font-mono text-[9px] space-y-2 custom-scrollbar bg-slate-950/50">
               {logs.map((log, idx) => (
-                <div key={idx} className="flex gap-2">
-                  <span className="text-slate-600 font-bold">[{log.time}]</span>
-                  <span className={`${log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-emerald-400' : 'text-slate-400'}`}>{log.msg}</span>
+                <div key={idx} className="flex gap-2 animate-in slide-in-from-right-2 duration-300">
+                  <span className="text-slate-600 font-bold shrink-0">[{log.time}]</span>
+                  <span className={`${log.type === 'error' ? 'text-red-400 font-bold' : log.type === 'success' ? 'text-emerald-400' : 'text-slate-400'} break-all`}>{log.msg}</span>
                 </div>
               ))}
               {logs.length === 0 && <div className="text-slate-700 text-center py-10 italic">等待操作...</div>}
