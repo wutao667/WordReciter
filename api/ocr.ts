@@ -17,7 +17,6 @@ export default async function handler(req: Request) {
     const body = await req.json();
     const { image, type } = body;
     
-    // 遵循用户要求：使用 GEM_API_KEY
     const apiKey = process.env.GEM_API_KEY;
 
     if (!apiKey) {
@@ -35,6 +34,9 @@ export default async function handler(req: Request) {
       const response = await ai.models.generateContent({
         model,
         contents: 'ping',
+        config: {
+          thinkingConfig: { thinkingBudget: 0 } // 极速响应
+        }
       });
 
       return new Response(JSON.stringify({ 
@@ -51,20 +53,20 @@ export default async function handler(req: Request) {
        throw new Error("未接收到图像数据 (image base64 is missing)");
     }
 
-    const imagePart = {
-      inlineData: {
-        mimeType: 'image/jpeg',
-        data: image, // Base64 字符串
-      },
-    };
-
-    const promptPart = {
-      text: "请提取图片中所有的英文单词和中文词汇。每行只输出一个单词或短语。不要输出数字、页码、标点符号或任何多余的解释。只返回单词列表。"
-    };
-
     const response = await ai.models.generateContent({
       model,
-      contents: { parts: [imagePart, promptPart] },
+      contents: {
+        parts: [{
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: image,
+          },
+        }],
+      },
+      config: {
+        systemInstruction: "你是一个专业的 OCR 插件。请提取图片中所有的英文单词和中文词汇。每行只输出一个单词或短语。不要输出数字、页码、标点符号、Markdown 格式或任何多余的解释。只返回纯文本单词列表。",
+        thinkingConfig: { thinkingBudget: 0 }, // 禁用思考，降低延迟，防止 Edge Function 超时
+      },
     });
 
     const text = response.text || "";
@@ -83,7 +85,6 @@ export default async function handler(req: Request) {
 
   } catch (error: any) {
     console.error('Gemini API Error:', error);
-    // 确保错误响应也是 JSON
     return new Response(JSON.stringify({ 
       success: false,
       error: error.message || '内部服务器错误' 

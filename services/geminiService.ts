@@ -22,8 +22,12 @@ async function fetchJsonResponse(url: string, options: RequestInit) {
 
   if (!contentType.includes('application/json')) {
     const errorText = await response.text();
+    // 专门针对 504 超时的友好提示
+    if (response.status === 504) {
+      throw new Error(`服务器执行超时 (504)。AI 响应过慢，请尝试上传更小或更清晰的图片。`);
+    }
     console.error('非 JSON 响应:', errorText);
-    throw new Error(`服务器返回了非 JSON 格式 (${response.status}): ${errorText.substring(0, 100)}...`);
+    throw new Error(`服务器返回了非 JSON 格式 (${response.status}): ${errorText.substring(0, 80)}...`);
   }
 
   const data = await response.json();
