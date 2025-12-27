@@ -29,13 +29,14 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   const [isTestingApi, setIsTestingApi] = useState(false);
   const [isTestingTTS, setIsTestingTTS] = useState(false);
   const [isTestingVision, setIsTestingVision] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
   const [apiStatus, setApiStatus] = useState<{success?: boolean, msg?: string, latency?: number} | null>(null);
   const [visionSteps, setVisionSteps] = useState<DiagnosisStep[]>([]);
-  const [copied, setCopied] = useState(false);
   const [envInfo, setEnvInfo] = useState<EnvInfo | null>(null);
 
-  // 视觉诊断专用：真实图片测试
+  // 视觉诊断专用：真实图片数据与统计
   const [testImageBase64, setTestImageBase64] = useState<string | null>(null);
+  const [compressionStats, setCompressionStats] = useState<{ original: number, compressed: number } | null>(null);
   const testFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -57,17 +58,56 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     setLogs(prev => [{ time, type, msg }, ...prev].slice(0, 50));
   };
 
-  const handleTestImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * 图片压缩逻辑 (与 App.tsx 保持同步)
+   */
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<{ base64: string, size: number }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = (maxWidth / width) * height;
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error("Canvas context failed"));
+        ctx.drawImage(img, 0, 0, width, height);
+        const base64 = canvas.toDataURL('image/jpeg', quality);
+        const compressedSize = Math.round((base64.length * 3) / 4);
+        resolve({ base64: base64.split(',')[1], size: compressedSize });
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = reject;
+    });
+  };
+
+  const handleTestImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = (reader.result as string).split(',')[1];
+    setIsCompressing(true);
+    addLog('info', `开始预处理图片: ${file.name}`);
+    
+    try {
+      const originalSize = file.size;
+      const { base64, size: compressedSize } = await compressImage(file);
+      
       setTestImageBase64(base64);
-      addLog('info', `已加载测试图片: ${file.name} (${Math.round(file.size / 1024)}KB)`);
-    };
-    reader.readAsDataURL(file);
+      setCompressionStats({ original: originalSize, compressed: compressedSize });
+      
+      const reduction = Math.round((1 - compressedSize / originalSize) * 100);
+      addLog('success', `图片压缩完成: ${Math.round(originalSize/1024)}KB -> ${Math.round(compressedSize/1024)}KB (体积减小 ${reduction}%)`);
+    } catch (err: any) {
+      addLog('error', `压缩失败: ${err.message}`);
+    } finally {
+      setIsCompressing(false);
+    }
   };
 
   const runApiTest = async () => {
@@ -83,7 +123,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
   const runVisionDiagnosis = async () => {
     setIsTestingVision(true);
     setVisionSteps([]);
-    addLog('info', '启动 Gemini 视觉代理分步诊断...');
+    addLog('info', '启动端到端视觉诊断 (含 OCR 提取测试)...');
     
     await diagnoseVisionProcess((stepName, status, details) => {
       setVisionSteps(prev => {
@@ -174,7 +214,6 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
             {activeTab === 'vision' && (
               <div className="space-y-6">
-                {/* 1. 图片上传区域 */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
                     <div className="flex items-center gap-3">
@@ -182,41 +221,51 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                       <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">测试图片源</h3>
                     </div>
                     <div 
-                      onClick={() => testFileInputRef.current?.click()}
-                      className="aspect-video w-full rounded-2xl border-2 border-dashed border-slate-200 bg-white flex flex-col items-center justify-center gap-3 hover:border-indigo-400 cursor-pointer transition-all overflow-hidden relative group"
+                      onClick={() => !isCompressing && testFileInputRef.current?.click()}
+                      className={`aspect-video w-full rounded-2xl border-2 border-dashed border-slate-200 bg-white flex flex-col items-center justify-center gap-3 hover:border-indigo-400 cursor-pointer transition-all overflow-hidden relative group ${isCompressing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {testImageBase64 ? (
+                      {isCompressing ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">正在进行图片预压缩...</p>
+                        </div>
+                      ) : testImageBase64 ? (
                         <>
                           <img src={`data:image/jpeg;base64,${testImageBase64}`} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="Test source" />
                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="text-white text-[10px] font-black uppercase tracking-widest bg-black/40 px-4 py-2 rounded-full backdrop-blur-md">点击更换图片</span>
+                            <span className="text-white text-[10px] font-black uppercase tracking-widest bg-black/40 px-4 py-2 rounded-full backdrop-blur-md">点击更换并重新压缩</span>
                           </div>
+                          {compressionStats && (
+                            <div className="absolute bottom-2 left-2 right-2 flex justify-between px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-lg text-[9px] font-bold text-white uppercase tracking-wider">
+                              <span>已压缩至 {Math.round(compressionStats.compressed/1024)}KB</span>
+                              <span className="text-emerald-400">-{Math.round((1 - compressionStats.compressed/compressionStats.original) * 100)}%</span>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <>
                           <div className="p-3 bg-slate-100 rounded-full text-slate-400 group-hover:text-indigo-500 group-hover:bg-indigo-50 transition-colors">
                             <Upload className="w-6 h-6" />
                           </div>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">上传真实图片进行 OCR 诊断</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4">上传真实图片<br/>诊断中心将同步进行预压缩测试</p>
                         </>
                       )}
                     </div>
                     <input type="file" ref={testFileInputRef} onChange={handleTestImageUpload} accept="image/*" className="hidden" />
                     <button 
                       onClick={runVisionDiagnosis} 
-                      disabled={isTestingVision} 
+                      disabled={isTestingVision || isCompressing} 
                       className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                       {isTestingVision ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} 
-                      {testImageBase64 ? '启动端到端提取测试' : '仅启动基础代理握手'}
+                      {testImageBase64 ? '启动端到端压缩提取测试' : '仅启动基础代理握手'}
                     </button>
                   </div>
 
-                  {/* 2. 诊断分步结果 */}
                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 flex flex-col">
                     <div className="flex items-center gap-3 mb-6">
                       <Camera className="w-5 h-5 text-indigo-500" />
-                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">诊断流水线</h3>
+                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">诊断流水线 (与业务代码对齐)</h3>
                     </div>
 
                     <div className="flex-1 space-y-3">
@@ -284,7 +333,6 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
             )}
           </div>
 
-          {/* Sidebar Logs */}
           <div className="w-full md:w-80 bg-slate-900 flex flex-col border-l border-slate-800">
             <div className="p-4 border-b border-slate-800 flex justify-between items-center">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">诊断流水</span>
