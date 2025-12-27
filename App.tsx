@@ -18,6 +18,7 @@ const App: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [listeningLang, setListeningLang] = useState<'en-US' | 'zh-CN'>('en-US');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState('准备上传...');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
@@ -29,8 +30,19 @@ const App: React.FC = () => {
   const pendingLangRef = useRef<'en-US' | 'zh-CN' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  const analysisSteps = [
+    "正在对齐图像...",
+    "建立 Gemini 安全连接...",
+    "Gemini 视觉模型正在解析...",
+    "正在识别英文字符...",
+    "正在提取中文翻译...",
+    "整理核心词汇列表...",
+    "即将完成..."
+  ];
 
   useEffect(() => {
     if (isDebugOpen && recognitionRef.current) {
@@ -159,6 +171,14 @@ const App: React.FC = () => {
 
     setIsAnalyzing(true);
     setErrorMsg(null);
+    
+    // 启动进度文字轮转
+    let stepIdx = 0;
+    setAnalysisStatus(analysisSteps[0]);
+    statusIntervalRef.current = setInterval(() => {
+      stepIdx = (stepIdx + 1) % analysisSteps.length;
+      setAnalysisStatus(analysisSteps[stepIdx]);
+    }, 1800);
 
     try {
       const reader = new FileReader();
@@ -176,10 +196,14 @@ const App: React.FC = () => {
         } else {
           setErrorMsg("未在图片中检测到单词");
         }
+        
+        // 清理状态
+        if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
         setIsAnalyzing(false);
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
+      if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
       setErrorMsg(err.message || "图像解析失败");
       setIsAnalyzing(false);
     }
@@ -326,9 +350,22 @@ const App: React.FC = () => {
                       />
                       
                       {isAnalyzing && (
-                        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center gap-3 animate-in fade-in duration-300 z-20">
-                          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                          <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest animate-pulse">AI 分析中...</span>
+                        <div className="absolute inset-0 bg-white/90 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center p-8 text-center gap-6 animate-in fade-in duration-300 z-20 border-2 border-indigo-500/10">
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse" />
+                            <Loader2 className="w-12 h-12 text-indigo-600 animate-spin relative z-10" />
+                          </div>
+                          <div className="space-y-2">
+                            <h3 className="text-sm font-black text-slate-900">AI分析中，请耐心等待，大约需要10秒钟</h3>
+                            <div className="flex items-center justify-center gap-2 h-6">
+                              <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-[0.15em] animate-in fade-in slide-in-from-bottom-1 duration-500 key={analysisStatus}">
+                                {analysisStatus}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="w-48 h-1 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-indigo-600 animate-progress-indefinite rounded-full" />
+                          </div>
                         </div>
                       )}
                     </div>
