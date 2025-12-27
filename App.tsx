@@ -5,7 +5,7 @@ import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
 import DebugConsole from './components/DebugConsole';
 import { extractWordsFromImage } from './services/geminiService';
-import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal, Info, ZapOff } from 'lucide-react';
+import { Plus, Mic, Library, Sparkles, Loader2, Zap, Layout, XCircle, Languages, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal, Info, ZapOff, Upload, Search } from 'lucide-react';
 
 interface AnalysisStep {
   id: string;
@@ -26,6 +26,8 @@ const App: React.FC = () => {
   const [listeningLang, setListeningLang] = useState<'en-US' | 'zh-CN'>('en-US');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisLogs, setAnalysisLogs] = useState<AnalysisStep[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [compressionStats, setCompressionStats] = useState<{ original: number, compressed: number } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
@@ -171,9 +173,6 @@ const App: React.FC = () => {
     try { rec.start(); } catch (e) {}
   };
 
-  /**
-   * 图片压缩核心逻辑
-   */
   const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<{ base64: string, size: number }> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -195,7 +194,6 @@ const App: React.FC = () => {
         ctx.drawImage(img, 0, 0, width, height);
         
         const base64 = canvas.toDataURL('image/jpeg', quality);
-        // 计算压缩后的体积 (Base64体积大约是二进制的 4/3)
         const compressedSize = Math.round((base64.length * 3) / 4);
         resolve({ base64: base64.split(',')[1], size: compressedSize });
         URL.revokeObjectURL(img.src);
@@ -210,23 +208,25 @@ const App: React.FC = () => {
 
     setIsAnalyzing(true);
     setErrorMsg(null);
+    setPreviewImage(null);
+    setCompressionStats(null);
     
-    // 初始化日志
     const originalSizeKb = Math.round(file.size / 1024);
     setAnalysisLogs(initialSteps.map((s, i) => i === 0 ? { ...s, status: 'loading', details: `加载文件: ${file.name} (${originalSizeKb}KB)` } : s));
     
     try {
-      // 步骤 1: 压缩
       setAnalysisLogs(prev => prev.map((s, i) => i === 0 ? { ...s, status: 'success', details: '读取成功' } : i === 1 ? { ...s, status: 'loading' } : s));
       const { base64, size: compressedSize } = await compressImage(file);
       const compressedSizeKb = Math.round(compressedSize / 1024);
       
+      setPreviewImage(base64);
+      setCompressionStats({ original: file.size, compressed: compressedSize });
+
       setAnalysisLogs(prev => prev.map((s, i) => 
         i === 1 ? { ...s, status: 'success', details: `优化完成: ${originalSizeKb}KB -> ${compressedSizeKb}KB` } : 
         i === 2 ? { ...s, status: 'loading' } : s
       ));
 
-      // 后续步进逻辑（模拟剩余流水线直到 API 返回）
       let currentStepIdx = 2;
       const logDetails = [
         "", "", "Edge 路由连接成功", "AI 特征分析中...", "正在扫描文本...", "正在同步结果..."
@@ -244,7 +244,6 @@ const App: React.FC = () => {
         });
       }, 1200);
 
-      // 调用真实的 API
       const extractedResult = await extractWordsFromImage(base64);
       const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
 
@@ -256,7 +255,10 @@ const App: React.FC = () => {
           return prev.trim() ? `${prev}\n${newContent}` : newContent;
         });
         setAnalysisLogs(prev => prev.map((s, i) => ({ ...s, status: 'success', details: logDetails[i] || s.details })));
-        setTimeout(() => setIsAnalyzing(false), 1000);
+        setTimeout(() => {
+          setIsAnalyzing(false);
+          setPreviewImage(null);
+        }, 1200);
       } else {
         setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error', details: '未识别到单词' } : s));
         setErrorMsg("未在图片中检测到单词");
@@ -408,57 +410,87 @@ const App: React.FC = () => {
                       />
                       
                       {isAnalyzing && (
-                        <div className="absolute inset-0 bg-white/95 backdrop-blur-xl rounded-3xl flex flex-col p-6 sm:p-10 animate-in fade-in duration-500 z-20 border-2 border-indigo-500/10 overflow-hidden">
-                          {/* Top Heading */}
-                          <div className="text-center space-y-3 mb-8 shrink-0">
-                            <div className="relative inline-block">
-                              <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse" />
-                              <Loader2 className="w-12 h-12 text-indigo-600 animate-spin relative z-10 mx-auto" />
-                            </div>
-                            <h3 className="text-sm font-black text-slate-900 leading-tight">AI 分析中，请耐心等待<br/>大约需要 10 秒钟</h3>
-                            <div className="w-48 h-1 bg-slate-100 rounded-full mx-auto overflow-hidden mt-4">
-                              <div className="h-full bg-indigo-600 animate-progress-indefinite rounded-full" />
-                            </div>
+                        <div className="absolute inset-0 bg-white/95 backdrop-blur-xl rounded-3xl flex flex-col animate-in fade-in duration-500 z-20 border-2 border-indigo-500/10 overflow-hidden">
+                          {/* Top: 缩略图展示区域 */}
+                          <div className="relative h-48 sm:h-56 w-full shrink-0 bg-slate-100 border-b overflow-hidden group/thumb">
+                            {previewImage ? (
+                               <img src={`data:image/jpeg;base64,${previewImage}`} className="w-full h-full object-cover" alt="Analyzing" />
+                            ) : (
+                               <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 animate-pulse">
+                                  <ImageIcon className="w-12 h-12 opacity-20 mb-2" />
+                                  <span className="text-[10px] font-black uppercase tracking-widest">正在读取图像流...</span>
+                               </div>
+                            )}
+                            {/* Overlay Stats */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent pointer-events-none" />
+                            
+                            {compressionStats && (
+                              <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 text-indigo-400">
+                                    <Zap className="w-3.5 h-3.5 fill-current" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">图像已优化</span>
+                                  </div>
+                                  <p className="text-white text-[9px] font-bold opacity-80 uppercase tracking-tight">
+                                    {Math.round(compressionStats.original/1024)}KB → {Math.round(compressionStats.compressed/1024)}KB
+                                  </p>
+                                </div>
+                                <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-lg">
+                                  -{Math.round((1 - compressionStats.compressed/compressionStats.original) * 100)}%
+                                </span>
+                              </div>
+                            )}
                           </div>
 
-                          {/* 诊断级流水线日志 */}
-                          <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pb-4">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4">
+                          {/* Bottom: 诊断流水线列表 */}
+                          <div className="flex-1 flex flex-col p-6 sm:p-8 min-h-0">
+                            <div className="flex items-center justify-between mb-4 shrink-0">
                               <div className="flex items-center gap-2">
-                                <Terminal className="w-4 h-4 text-slate-400" />
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">识别引擎诊断流水线</span>
+                                <Terminal className="w-4 h-4 text-indigo-600" />
+                                <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">智能分析工作站</h3>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Loader2 className="w-3 h-3 text-indigo-600 animate-spin" />
+                                <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">处理中</span>
                               </div>
                             </div>
-                            
-                            {analysisLogs.map((log, i) => (
-                              <div key={log.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-500 animate-in slide-in-from-bottom-2 ${
-                                log.status === 'success' ? 'bg-emerald-50 border-emerald-100' : 
-                                log.status === 'loading' ? 'bg-indigo-50 border-indigo-200' : 
-                                log.status === 'error' ? 'bg-red-50 border-red-100' : 'bg-slate-50/50 border-transparent opacity-40'
-                              }`} style={{ animationDelay: `${i * 80}ms` }}>
-                                <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                                  log.status === 'success' ? 'bg-emerald-500 text-white' : 
-                                  log.status === 'loading' ? 'bg-indigo-500 text-white animate-pulse' : 
-                                  log.status === 'error' ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-400'
-                                }`}>
-                                  {log.status === 'success' ? <CheckCircle2 className="w-4 h-4" /> : 
-                                   log.status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 
-                                   log.status === 'error' ? <AlertCircle className="w-4 h-4" /> : <div className="w-2 h-2 bg-current rounded-full" />}
-                                </div>
-                                <div className="flex-1 overflow-hidden">
-                                  <div className="flex justify-between items-center mb-0.5">
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${
-                                      log.status === 'loading' ? 'text-indigo-900' : 
-                                      log.status === 'error' ? 'text-red-900' : 'text-slate-600'
-                                    }`}>{log.name}</span>
-                                    {log.status === 'success' && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100 px-1.5 rounded-md">OK</span>}
+
+                            <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pb-2">
+                              {analysisLogs.map((log, i) => (
+                                <div key={log.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-500 animate-in slide-in-from-bottom-2 ${
+                                  log.status === 'success' ? 'bg-emerald-50 border-emerald-100' : 
+                                  log.status === 'loading' ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 
+                                  log.status === 'error' ? 'bg-red-50 border-red-100' : 'bg-slate-50/50 border-transparent opacity-40'
+                                }`} style={{ animationDelay: `${i * 80}ms` }}>
+                                  <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                                    log.status === 'success' ? 'bg-emerald-500 text-white' : 
+                                    log.status === 'loading' ? 'bg-indigo-500 text-white animate-pulse' : 
+                                    log.status === 'error' ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-400'
+                                  }`}>
+                                    {log.status === 'success' ? <CheckCircle2 className="w-4 h-4" /> : 
+                                     log.status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 
+                                     log.status === 'error' ? <AlertCircle className="w-4 h-4" /> : <div className="w-2 h-2 bg-current rounded-full" />}
                                   </div>
-                                  <p className={`text-[9px] truncate ${
-                                    log.status === 'error' ? 'text-red-500 font-bold italic' : 'text-slate-400 italic'
-                                  }`}>{log.details || '等待任务开始...'}</p>
+                                  <div className="flex-1 overflow-hidden">
+                                    <div className="flex justify-between items-center mb-0.5">
+                                      <span className={`text-[10px] font-black uppercase tracking-widest ${
+                                        log.status === 'loading' ? 'text-indigo-900' : 
+                                        log.status === 'error' ? 'text-red-900' : 'text-slate-600'
+                                      }`}>{log.name}</span>
+                                      {log.status === 'success' && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100 px-1.5 rounded-md">OK</span>}
+                                    </div>
+                                    <p className={`text-[9px] truncate ${
+                                      log.status === 'error' ? 'text-red-500 font-bold italic' : 'text-slate-400 italic'
+                                    }`}>{log.details || '等待调度...'}</p>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 opacity-50">
+                               <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Gemini 3.0 Vision Engine</span>
+                            </div>
                           </div>
                         </div>
                       )}
