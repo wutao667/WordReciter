@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
 import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported } from '../services/geminiService';
-import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cloud, Lock } from 'lucide-react';
+import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cloud, Lock, Shuffle } from 'lucide-react';
 
 interface StudySessionProps {
   list: WordList;
@@ -10,6 +10,7 @@ interface StudySessionProps {
 }
 
 const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
+  // 初始状态不再随机，直接同步 list.words
   const [shuffledWords, setShuffledWords] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -32,15 +33,26 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     setIsPlaying(false);
   }, []);
 
+  // 初始化：按原顺序加载
   useEffect(() => {
     isComponentMounted.current = true;
-    setShuffledWords([...list.words].sort(() => Math.random() - 0.5));
+    setShuffledWords([...list.words]); 
     
     return () => {
       isComponentMounted.current = false;
       stopPlayback();
     };
   }, [list.words, stopPlayback]);
+
+  // 手动打乱顺序逻辑
+  const handleManualShuffle = () => {
+    stopPlayback();
+    const randomized = [...shuffledWords].sort(() => Math.random() - 0.5);
+    setShuffledWords(randomized);
+    setCurrentIndex(0); // 重置进度
+    setIsWordVisible(false);
+    // 状态更新后会触发 currentIndex 的 useEffect 从而开始播放
+  };
 
   const startSequence = useCallback(async () => {
     const word = shuffledWords[currentIndex];
@@ -86,10 +98,14 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
 
   const handleNext = () => {
     currentIndex < shuffledWords.length - 1 ? setCurrentIndex(prev => prev + 1) : onFinish();
+    setIsWordVisible(false);
   };
 
   const handlePrevious = () => {
-    if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+      setIsWordVisible(false);
+    }
   };
 
   const toggleEngine = () => {
@@ -118,13 +134,23 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-red-500/20 group-hover:text-red-400 transition-all">
               <X className="w-5 h-5 md:w-6 md:h-6" />
             </div>
-            <span className="font-black text-[10px] md:text-xs tracking-[0.2em] uppercase">退出</span>
+            <span className="font-black text-[10px] md:text-xs tracking-[0.2em] uppercase hidden sm:inline">退出</span>
           </button>
           
-          <div className="text-right">
-            <div className="text-indigo-400 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] mb-1 md:mb-1">{list.name}</div>
-            <div className="text-white font-black text-xl md:text-2xl tracking-tighter">
-              {currentIndex + 1} <span className="text-slate-600 mx-1">/</span> {shuffledWords.length}
+          <div className="flex items-center gap-4 md:gap-8">
+            <button 
+              onClick={handleManualShuffle}
+              className="px-4 py-2 md:px-6 md:py-3 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl md:rounded-2xl border border-indigo-500/30 flex items-center gap-2 transition-all active:scale-95 group"
+            >
+              <Shuffle className="w-4 h-4" />
+              <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">打乱顺序</span>
+            </button>
+
+            <div className="text-right">
+              <div className="text-indigo-400 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] mb-1">{list.name}</div>
+              <div className="text-white font-black text-xl md:text-2xl tracking-tighter leading-none">
+                {currentIndex + 1} <span className="text-slate-600 mx-1">/</span> {shuffledWords.length}
+              </div>
             </div>
           </div>
         </div>
@@ -173,7 +199,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
           {/* 控制区域 (右侧/中下方) */}
           <div className="md:w-[320px] lg:w-[400px] flex flex-col justify-between shrink-0 space-y-4 md:space-y-6">
             
-            {/* 引擎切换卡片 (仅 md 以上宽屏显示) */}
+            {/* 引擎切换卡片 */}
             <div className="hidden md:block bg-white/5 backdrop-blur-xl border border-white/10 p-6 lg:p-10 rounded-[2.5rem] shadow-xl">
               <div className="flex items-center gap-3 mb-6">
                  <div className="p-3 bg-indigo-500/10 rounded-2xl"><Zap className="w-5 h-5 text-indigo-400" /></div>
@@ -197,7 +223,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
             {/* 播放控制主卡片 */}
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 md:p-10 rounded-[2.5rem] md:rounded-[3.5rem] shadow-2xl flex-1 flex flex-col justify-center">
               
-              {/* 移动端竖屏状态下的引擎切换按钮 */}
+              {/* 移动端引擎切换 */}
               <div className="md:hidden flex justify-center mb-6">
                 <button 
                   onClick={toggleEngine}
