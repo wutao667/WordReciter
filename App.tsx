@@ -5,7 +5,7 @@ import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
 import DebugConsole from './components/DebugConsole';
 import { extractWordsFromImage } from './services/geminiService';
-import { Plus, Mic, Sparkles, Loader2, Zap, Layout, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal, Info, Shuffle, X } from 'lucide-react';
+import { Plus, Mic, Sparkles, Loader2, Zap, Layout, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal, Info, Shuffle, X, Languages } from 'lucide-react';
 
 interface AnalysisStep {
   id: string;
@@ -33,6 +33,7 @@ const App: React.FC = () => {
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
   
+  // OCR 语种选择状态
   const [ocrLangs, setOcrLangs] = useState<{ zh: boolean, en: boolean }>({ zh: true, en: true });
 
   const recognitionRef = useRef<any>(null);
@@ -231,9 +232,12 @@ const App: React.FC = () => {
           return next;
         });
       }, 1200);
+      
+      // 应用语种选择
       const selectedLangs = [];
       if (ocrLangs.zh) selectedLangs.push('zh');
       if (ocrLangs.en) selectedLangs.push('en');
+      
       const extractedResult = await extractWordsFromImage(base64, false, selectedLangs);
       const words = Array.isArray(extractedResult) ? extractedResult : extractedResult.cleaned;
       if (logIntervalRef.current) clearInterval(logIntervalRef.current);
@@ -245,8 +249,8 @@ const App: React.FC = () => {
         setAnalysisLogs(prev => prev.map((s, i) => ({ ...s, status: 'success', details: logDetails[i] || s.details })));
         setTimeout(() => { setIsAnalyzing(false); setPreviewImage(null); }, 1200);
       } else {
-        setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error', details: '未识别到单词' } : s));
-        setErrorMsg("未在图片中检测到单词");
+        setAnalysisLogs(prev => prev.map(s => s.status === 'loading' ? { ...s, status: 'error', details: '未识别到符合语种要求的单词' } : s));
+        setErrorMsg("未检测到符合所选语种的单词");
         setTimeout(() => setIsAnalyzing(false), 2000);
       }
     } catch (err: any) {
@@ -367,34 +371,65 @@ const App: React.FC = () => {
                         className="w-full px-6 py-5 rounded-2xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all shadow-inner" 
                       />
                     </div>
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">快速录入工具</label>
-                      <div className="flex flex-wrap gap-2">
-                        {!isMobile && (
-                          <>
-                            <button type="button" onClick={() => toggleListening('en-US')} className={`px-4 py-3 rounded-full text-[10px] font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}><Mic className="w-3.5 h-3.5" /> 英文听写</button>
-                            <button type="button" onClick={() => toggleListening('zh-CN')} className={`px-4 py-3 rounded-full text-[10px] font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}><Mic className="w-3.5 h-3.5" /> 中文听写</button>
-                          </>
-                        )}
-                        <button type="button" onClick={() => cameraInputRef.current?.click()} className="px-4 py-3 rounded-full text-[10px] font-black bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all flex items-center gap-2"><Camera className="w-3.5 h-3.5" /> 拍照识词</button>
-                        <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-3 rounded-full text-[10px] font-black bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-2"><ImageIcon className="w-3.5 h-3.5" /> 相册选择</button>
-                        <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
-                        <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    
+                    <div className="space-y-6">
+                      {/* OCR 语种选择 UI */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 ml-2">
+                          <Languages className="w-3 h-3 text-indigo-500" />
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">识别语种 (拍照/识图)</label>
+                        </div>
+                        <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
+                          {[
+                            { id: 'both', label: '中英双语', state: { zh: true, en: true } },
+                            { id: 'en', label: '仅英文', state: { zh: false, en: true } },
+                            { id: 'zh', label: '仅中文', state: { zh: true, en: false } }
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setOcrLangs(opt.state)}
+                              className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                                ocrLangs.zh === opt.state.zh && ocrLangs.en === opt.state.en
+                                  ? 'bg-white text-indigo-600 shadow-sm'
+                                  : 'text-slate-400 hover:text-slate-600'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      {isListening && (
-                        <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl">
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
-                            <span className="text-[9px] font-black uppercase tracking-widest opacity-80">正在倾听...</span>
+
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">快速录入工具</label>
+                        <div className="flex flex-wrap gap-2">
+                          {!isMobile && (
+                            <>
+                              <button type="button" onClick={() => toggleListening('en-US')} className={`px-4 py-3 rounded-full text-[10px] font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}><Mic className="w-3.5 h-3.5" /> 英文听写</button>
+                              <button type="button" onClick={() => toggleListening('zh-CN')} className={`px-4 py-3 rounded-full text-[10px] font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}><Mic className="w-3.5 h-3.5" /> 中文听写</button>
+                            </>
+                          )}
+                          <button type="button" onClick={() => cameraInputRef.current?.click()} className="px-4 py-3 rounded-full text-[10px] font-black bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all flex items-center gap-2"><Camera className="w-3.5 h-3.5" /> 拍照识词</button>
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-3 rounded-full text-[10px] font-black bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-2"><ImageIcon className="w-3.5 h-3.5" /> 相册选择</button>
+                          <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                          <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} />
+                        </div>
+                        {isListening && (
+                          <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
+                              <span className="text-[9px] font-black uppercase tracking-widest opacity-80">正在倾听...</span>
+                            </div>
+                            <p className="text-xs italic font-medium truncate">{interimText || "请说话..."}</p>
                           </div>
-                          <p className="text-xs italic font-medium truncate">{interimText || "请说话..."}</p>
-                        </div>
-                      )}
-                      {errorMsg && (
-                        <div className="flex items-center gap-2 text-red-500 text-[10px] font-bold px-4 py-3 bg-red-50 rounded-xl">
-                          <AlertCircle className="w-3.5 h-3.5" /> {errorMsg}
-                        </div>
-                      )}
+                        )}
+                        {errorMsg && (
+                          <div className="flex items-center gap-2 text-red-500 text-[10px] font-bold px-4 py-3 bg-red-50 rounded-xl">
+                            <AlertCircle className="w-3.5 h-3.5" /> {errorMsg}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
