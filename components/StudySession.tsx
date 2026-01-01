@@ -272,7 +272,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
 
               <div className="w-full px-2">
                 <div className="flex justify-between items-end mb-2 md:mb-4">
-                  <span className="text-[8px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Dictation</span>
+                  <span className="text-[8px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">进度</span>
                   <span className="text-[8px] md:text-[10px] font-black text-indigo-400 uppercase tracking-widest">{Math.round(progress)}%</span>
                 </div>
                 <div className="h-2.5 md:h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 p-0.5">

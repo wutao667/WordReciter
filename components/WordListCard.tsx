@@ -12,6 +12,7 @@ interface WordListCardProps {
 
 const WordListCard: React.FC<WordListCardProps> = ({ list, onEdit, onDelete, onSelect }) => {
   const dateTimeStr = new Date(list.createdAt).toLocaleDateString('zh-CN', {
+    year: 'numeric',
     month: 'short',
     day: 'numeric'
   });
