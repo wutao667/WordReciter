@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
 import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported } from '../services/geminiService';
@@ -31,6 +32,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     setIsPlaying(false);
   }, []);
 
+  // 严格遵循词单传入的顺序
   useEffect(() => {
     isComponentMounted.current = true;
     setCurrentWords([...list.words]); 
@@ -104,107 +106,157 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   const progress = ((currentIndex + 1) / currentWords.length) * 100;
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center p-3 sm:p-4 md:p-8 bg-slate-950 overflow-hidden">
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center p-4 md:p-8 bg-slate-950 overflow-hidden">
+      {/* 沉浸式动态背景 */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-20%] left-[-10%] w-[80%] h-[80%] bg-indigo-600/20 rounded-full blur-[160px] animate-pulse" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/10 rounded-full blur-[140px]" />
       </div>
 
       <div className="relative z-10 w-full max-w-7xl h-full flex flex-col">
-        <div className="flex justify-between items-center bg-white/5 backdrop-blur-xl p-4 md:p-6 rounded-[2rem] border border-white/10 shadow-2xl mb-6 shrink-0">
-          <button onClick={onFinish} className="flex items-center space-x-3 text-slate-400 hover:text-white transition-all group">
-            <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-red-500/20 group-hover:text-red-400 transition-all">
-              <X className="w-6 h-6" />
+        {/* 顶部纯净头部 */}
+        <div className="flex justify-between items-center bg-white/5 backdrop-blur-2xl px-6 py-5 rounded-[2.5rem] border border-white/10 shadow-2xl mb-8 shrink-0">
+          <button 
+            onClick={onFinish} 
+            className="flex items-center space-x-3 text-slate-400 hover:text-white transition-all group active:scale-95"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-red-500/20 group-hover:text-red-400 transition-all border border-white/5">
+              <X className="w-5 h-5" />
             </div>
             <span className="font-black text-xs tracking-[0.2em] uppercase hidden sm:inline">退出听写</span>
           </button>
           
-          <div className="text-right">
-            <div className="text-indigo-400 text-[10px] font-black uppercase tracking-[0.3em] mb-1">{list.name}</div>
-            <div className="text-white font-black text-2xl tracking-tighter leading-none">
-              {currentIndex + 1} <span className="text-slate-600 mx-1">/</span> {currentWords.length}
+          <div className="text-right flex flex-col items-end">
+            <span className="text-indigo-400 text-[10px] font-black uppercase tracking-[0.3em] mb-1.5 opacity-80">{list.name}</span>
+            <div className="flex items-baseline text-white">
+              <span className="font-black text-3xl tracking-tighter leading-none">{currentIndex + 1}</span>
+              <span className="text-slate-500 mx-2 font-bold text-lg">/</span>
+              <span className="text-slate-400 font-bold text-lg opacity-60">{currentWords.length}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0 overflow-hidden pb-6">
+        {/* 主内容交互区 */}
+        <div className="flex-1 flex flex-col md:flex-row gap-8 min-h-0 overflow-hidden pb-8">
+          
+          {/* 单词显示卡片 */}
           <div className="flex-1 flex flex-col items-center justify-center min-h-0">
             <div className={`w-full h-full rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.01] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''}`}>
+              
               <div className="relative text-center w-full flex-1 flex flex-col items-center justify-center min-h-0 overflow-hidden">
                 {hasError ? (
-                  <div className="flex flex-col items-center space-y-4 text-amber-400">
-                    <AlertTriangle className="w-12 h-12" />
-                    <button onClick={handleManualPlay} className="px-8 py-3 bg-amber-500 text-slate-900 rounded-full text-xs font-black shadow-lg">重试播报</button>
+                  <div className="flex flex-col items-center space-y-6 text-amber-400">
+                    <AlertTriangle className="w-16 h-16 opacity-50" />
+                    <button onClick={handleManualPlay} className="px-10 py-4 bg-amber-500 text-slate-900 rounded-2xl text-xs font-black shadow-lg hover:scale-105 active:scale-95 transition-all">重新播放音频</button>
                   </div>
                 ) : isWordVisible ? (
-                  <h1 className="text-6xl sm:text-7xl md:text-9xl font-black tracking-tighter text-white animate-in zoom-in-90 duration-500 break-all px-6">
+                  <h1 className="text-6xl sm:text-7xl md:text-9xl font-black tracking-tighter text-white animate-in zoom-in-95 duration-500 break-all px-8 drop-shadow-2xl">
                     {currentWords[currentIndex]}
                   </h1>
                 ) : (
-                  <div className="flex flex-col items-center justify-center space-y-10">
-                    <div className="flex space-x-4">
-                      {[1, 2, 3].map(i => <div key={i} className="w-5 h-5 rounded-full bg-indigo-500/40 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />)}
+                  <div className="flex flex-col items-center justify-center space-y-12">
+                    <div className="flex space-x-5">
+                      {[1, 2, 3].map(i => <div key={i} className="w-4 h-4 rounded-full bg-indigo-500/40 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />)}
                     </div>
-                    <Headphones className={`w-32 h-32 text-indigo-500/30 ${isPlaying ? 'animate-bounce' : ''}`} />
-                    <p className="text-indigo-300/40 text-sm font-black uppercase tracking-[0.5em]">正在朗读，请听写</p>
+                    <div className="relative">
+                      <Headphones className={`w-32 h-32 text-indigo-500/20 transition-all duration-500 ${isPlaying ? 'scale-110 text-indigo-400' : ''}`} />
+                      {isPlaying && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                           <div className="w-full h-full rounded-full border-4 border-indigo-500/20 animate-ping" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-indigo-300/40 text-[11px] font-black uppercase tracking-[0.6em] animate-pulse">正在播报，请听写</p>
                   </div>
                 )}
               </div>
+
+              {/* 答案切换按钮 */}
               <button
                 onClick={() => setIsWordVisible(!isWordVisible)}
-                className={`mt-10 px-14 py-7 rounded-3xl flex items-center space-x-3 transition-all duration-500 font-black text-sm uppercase tracking-widest active:scale-95 shrink-0 ${isWordVisible ? 'bg-indigo-600 text-white shadow-2xl' : 'bg-white/10 text-slate-400 hover:bg-white/20 border border-white/10'}`}
+                className={`mt-10 px-16 py-8 rounded-[2.5rem] flex items-center space-x-4 transition-all duration-500 font-black text-xs uppercase tracking-widest active:scale-95 shrink-0 select-none ${isWordVisible ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-500/40 border-transparent' : 'bg-white/10 text-slate-400 hover:bg-white/20 border border-white/10'}`}
               >
                 {isWordVisible ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
-                <span>{isWordVisible ? '隐藏答案' : '显示答案'}</span>
+                <span>{isWordVisible ? '隐藏拼写' : '查看拼写'}</span>
               </button>
             </div>
           </div>
 
-          <div className="md:w-[400px] flex flex-col justify-between shrink-0 space-y-6">
-            <div className="hidden md:block bg-white/5 backdrop-blur-xl border border-white/10 p-10 rounded-[2.5rem] shadow-xl">
-              <div className="flex items-center gap-3 mb-6">
-                 <Zap className="w-5 h-5 text-indigo-400" />
-                 <span className="text-xs font-black text-white uppercase tracking-widest">语音引擎</span>
+          {/* 右侧/底部控制台 */}
+          <div className="md:w-[380px] lg:w-[440px] flex flex-col justify-between shrink-0 space-y-8">
+            
+            {/* 引擎状态卡片 */}
+            <div className="hidden md:block bg-white/5 backdrop-blur-2xl border border-white/10 p-10 rounded-[3rem] shadow-xl">
+              <div className="flex items-center justify-between mb-8 px-2">
+                 <div className="flex items-center gap-3">
+                   <Zap className="w-5 h-5 text-indigo-400" />
+                   <span className="text-[11px] font-black text-white uppercase tracking-widest opacity-80">语音引擎</span>
+                 </div>
+                 <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-tighter ${selectedEngine === 'Web Speech' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-sky-500/20 text-sky-400'}`}>
+                   {selectedEngine === 'Web Speech' ? 'Offline' : 'Neural'}
+                 </span>
               </div>
               <button 
                 onClick={toggleEngine}
                 disabled={!localAvailable && selectedEngine === 'AI-TTS'}
-                className={`w-full flex items-center gap-4 p-4 rounded-2xl border transition-all active:scale-[0.98] ${selectedEngine === 'Web Speech' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-sky-500/10 border-sky-500/30 text-sky-400'}`}
+                className={`w-full flex items-center gap-5 p-5 rounded-3xl border-2 transition-all duration-300 active:scale-[0.97] group ${selectedEngine === 'Web Speech' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-sky-500/5 border-sky-500/20 text-sky-400'}`}
               >
-                <div className={`w-3.5 h-3.5 rounded-full animate-pulse ${selectedEngine === 'Web Speech' ? 'bg-emerald-400' : 'bg-sky-400'}`} />
-                <div className="flex-1 text-left text-[10px] font-black uppercase tracking-widest">{selectedEngine === 'Web Speech' ? '本地离线' : '云端增强'}</div>
-                {selectedEngine === 'Web Speech' ? <Zap className="w-4 h-4" /> : <Cloud className="w-4 h-4" />}
+                <div className={`w-4 h-4 rounded-full transition-all duration-500 ${selectedEngine === 'Web Speech' ? 'bg-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.6)]' : 'bg-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.6)]'}`} />
+                <div className="flex-1 text-left">
+                  <span className="text-[11px] font-black uppercase tracking-widest block mb-0.5">切换合成模式</span>
+                  <span className="text-[9px] font-bold opacity-60 italic">{selectedEngine === 'Web Speech' ? '由浏览器引擎渲染' : '由 AI 云端算力生成'}</span>
+                </div>
+                {selectedEngine === 'Web Speech' ? <Zap className="w-5 h-5 opacity-40 group-hover:opacity-100 transition-opacity" /> : <Cloud className="w-5 h-5 opacity-40 group-hover:opacity-100 transition-opacity" />}
               </button>
             </div>
 
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-10 rounded-[3.5rem] shadow-2xl flex-1 flex flex-col justify-center">
-              <div className="flex items-center justify-center space-x-10 mb-14">
-                <button onClick={handlePrevious} disabled={currentIndex === 0} className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 disabled:opacity-20 transition-all active:scale-90">
+            {/* 核心播放控制 */}
+            <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-10 md:p-12 rounded-[4rem] shadow-2xl flex-1 flex flex-col justify-center">
+              <div className="flex items-center justify-center space-x-10 mb-16">
+                <button 
+                  onClick={handlePrevious} 
+                  disabled={currentIndex === 0} 
+                  className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 disabled:opacity-10 transition-all active:scale-90 shadow-lg"
+                >
                   <SkipBack className="w-8 h-8 fill-current" />
                 </button>
-                <button onClick={handleManualPlay} className={`w-32 h-32 rounded-[3rem] flex items-center justify-center transition-all duration-500 active:scale-[0.85] ${isPlaying ? 'bg-indigo-600 text-white' : 'bg-white text-slate-950 hover:scale-105'}`}>
+
+                <button 
+                  onClick={handleManualPlay} 
+                  className={`w-32 h-32 rounded-[3.5rem] flex items-center justify-center transition-all duration-500 active:scale-[0.85] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/40' : 'bg-white text-slate-950 hover:scale-105'}`}
+                >
                   {isPlaying ? (
-                    <div className="flex items-center space-x-1.5">
-                      <div className="w-3 h-12 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
-                      <div className="w-3 h-16 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
-                      <div className="w-3 h-12 bg-white rounded-full animate-bounce" />
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3.5 h-12 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
+                      <div className="w-3.5 h-16 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
+                      <div className="w-3.5 h-12 bg-white rounded-full animate-bounce" />
                     </div>
                   ) : <RotateCcw className="w-14 h-14" />}
                 </button>
-                <button onClick={handleNext} className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-all active:scale-90">
+
+                <button 
+                  onClick={handleNext} 
+                  className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-all active:scale-90 shadow-lg"
+                >
                   <SkipForward className="w-8 h-8 fill-current" />
                 </button>
               </div>
-              <div className="w-full">
-                <div className="flex justify-between mb-3">
-                  <span className="text-xs font-black text-slate-500 uppercase tracking-widest">学习进度</span>
-                  <span className="text-xs font-black text-indigo-400 uppercase tracking-widest">{Math.round(progress)}%</span>
+
+              {/* 视觉进度条 */}
+              <div className="w-full px-2">
+                <div className="flex justify-between items-end mb-4">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dictation Progress</span>
+                  <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{Math.round(progress)}%</span>
                 </div>
-                <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/10">
-                  <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${progress}%` }} />
+                <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 p-0.5">
+                  <div 
+                    className="h-full bg-gradient-to-r from-indigo-600 via-indigo-400 to-indigo-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_20px_rgba(99,102,241,0.5)]" 
+                    style={{ width: `${progress}%` }} 
+                  />
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </div>
