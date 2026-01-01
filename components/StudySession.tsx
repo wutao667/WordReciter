@@ -109,13 +109,13 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
 
   const handleNext = () => {
     currentIndex < activeIndices.length - 1 ? setCurrentIndex(prev => prev + 1) : onFinish();
-    setIsWordVisible(false);
+    // 移除了 setIsWordVisible(false)，使显隐状态在切换单词时保持
   };
 
   const handlePrevious = () => {
     if (currentIndex > 0) {
       setCurrentIndex(prev => prev - 1);
-      setIsWordVisible(false);
+      // 移除了 setIsWordVisible(false)，使显隐状态在切换单词时保持
     }
   };
 
