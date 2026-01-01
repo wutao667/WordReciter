@@ -6,13 +6,15 @@ import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTria
 
 interface StudySessionProps {
   list: WordList;
+  mode: 'all' | 'mistakes';
   onFinish: () => void;
   onUpdateList: (listId: string, words: string[]) => void;
 }
 
-const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateList }) => {
-  const [currentWords, setCurrentWords] = useState<string[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpdateList }) => {
+  // activeIndices 存储当前会话中需要练习的单词在原始 list.words 中的索引
+  const [activeIndices, setActiveIndices] = useState<number[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0); // 这是针对 activeIndices 的索引
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWordVisible, setIsWordVisible] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -33,21 +35,40 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
     setIsPlaying(false);
   }, []);
 
+  // 根据模式初始化活动索引
   useEffect(() => {
     isComponentMounted.current = true;
-    setCurrentWords([...list.words]); 
+    const indices: number[] = [];
+    for (let i = 0; i < list.words.length; i++) {
+      if (mode === 'all' || list.words[i].startsWith('*')) {
+        indices.push(i);
+      }
+    }
+    
+    // 如果是仅生词模式但没有生词，自动结束
+    if (indices.length === 0) {
+      onFinish();
+      return;
+    }
+
+    setActiveIndices(indices);
     return () => {
       isComponentMounted.current = false;
       stopPlayback();
     };
-  }, [list.words, stopPlayback]);
+  }, [list.words, mode, onFinish, stopPlayback]);
+
+  // 获取当前正在学习的原始单词索引和值
+  const currentMasterIndex = activeIndices[currentIndex];
+  const rawWord = list.words[currentMasterIndex];
 
   const startSequence = useCallback(async () => {
-    const rawWord = currentWords[currentIndex];
-    if (!rawWord) return;
+    if (currentMasterIndex === undefined) return;
+    const wordValue = list.words[currentMasterIndex];
+    if (!wordValue) return;
     
     // 自动剥离生错字标记再进行朗读
-    const wordToSpeak = rawWord.startsWith('*') ? rawWord.substring(1) : rawWord;
+    const wordToSpeak = wordValue.startsWith('*') ? wordValue.substring(1) : wordValue;
     
     stopPlayback();
     setHasError(false);
@@ -73,21 +94,21 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
         setIsPlaying(false);
       }
     }
-  }, [currentWords, currentIndex, stopPlayback, selectedEngine]);
+  }, [list.words, currentMasterIndex, stopPlayback, selectedEngine]);
 
   const handleManualPlay = () => {
     startSequence();
   };
 
   useEffect(() => {
-    if (currentWords.length > 0) {
+    if (activeIndices.length > 0) {
       startSequence();
     }
     return () => stopPlayback();
-  }, [currentIndex, currentWords, startSequence, stopPlayback]);
+  }, [currentIndex, activeIndices, startSequence, stopPlayback]);
 
   const handleNext = () => {
-    currentIndex < currentWords.length - 1 ? setCurrentIndex(prev => prev + 1) : onFinish();
+    currentIndex < activeIndices.length - 1 ? setCurrentIndex(prev => prev + 1) : onFinish();
     setIsWordVisible(false);
   };
 
@@ -106,39 +127,36 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
   };
 
   const toggleErrorMark = () => {
-    const newWords = [...currentWords];
-    const isMarked = newWords[currentIndex].startsWith('*');
+    if (currentMasterIndex === undefined) return;
+    
+    const newMasterWords = [...list.words];
+    const isMarked = newMasterWords[currentMasterIndex].startsWith('*');
     if (isMarked) {
-      newWords[currentIndex] = newWords[currentIndex].substring(1);
+      newMasterWords[currentMasterIndex] = newMasterWords[currentMasterIndex].substring(1);
     } else {
-      newWords[currentIndex] = '*' + newWords[currentIndex];
+      newMasterWords[currentMasterIndex] = '*' + newMasterWords[currentMasterIndex];
     }
-    setCurrentWords(newWords);
-    // 即时通知父组件保存到 localStorage
-    onUpdateList(list.id, newWords);
+    
+    // 即时通知父组件保存原始词单
+    onUpdateList(list.id, newMasterWords);
   };
 
-  if (currentWords.length === 0) return null;
-  const progress = ((currentIndex + 1) / currentWords.length) * 100;
-  const rawWord = currentWords[currentIndex];
+  if (activeIndices.length === 0) return null;
+
+  const progress = ((currentIndex + 1) / activeIndices.length) * 100;
   const isMarked = rawWord?.startsWith('*');
   const displayWord = isMarked ? rawWord.substring(1) : rawWord;
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 bg-slate-950 overflow-hidden">
-      {/* 沉浸式动态背景 */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-20%] left-[-10%] w-[80%] h-[80%] bg-indigo-600/20 rounded-full blur-[160px] animate-pulse" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/10 rounded-full blur-[140px]" />
       </div>
 
       <div className="relative z-10 w-full max-w-7xl h-full flex flex-col min-h-0">
-        {/* 顶部纯净头部 */}
         <div className="flex justify-between items-center bg-white/5 backdrop-blur-2xl px-4 py-3 md:px-6 md:py-5 rounded-2xl md:rounded-[2.5rem] border border-white/10 shadow-2xl mb-3 md:mb-8 shrink-0">
-          <button 
-            onClick={onFinish} 
-            className="flex items-center space-x-2 md:space-x-3 text-slate-400 hover:text-white transition-all group active:scale-95"
-          >
+          <button onClick={onFinish} className="flex items-center space-x-2 md:space-x-3 text-slate-400 hover:text-white transition-all group active:scale-95">
             <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-red-500/20 group-hover:text-red-400 transition-all border border-white/5">
               <X className="w-4 h-4 md:w-5 md:h-5" />
             </div>
@@ -146,19 +164,16 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
           </button>
           
           <div className="text-right flex flex-col items-end">
-            <span className="text-indigo-400 text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] mb-0.5 md:mb-1.5 opacity-80 truncate max-w-[150px] md:max-w-none">{list.name}</span>
+            <span className="text-indigo-400 text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] mb-0.5 md:mb-1.5 opacity-80 truncate max-w-[150px] md:max-w-none">{list.name} {mode === 'mistakes' && '(仅生词)'}</span>
             <div className="flex items-baseline text-white">
               <span className="font-black text-xl md:text-3xl tracking-tighter leading-none">{currentIndex + 1}</span>
               <span className="text-slate-500 mx-1.5 md:mx-2 font-bold text-sm md:text-lg">/</span>
-              <span className="text-slate-400 font-bold text-sm md:text-lg opacity-60">{currentWords.length}</span>
+              <span className="text-slate-400 font-bold text-sm md:text-lg opacity-60">{activeIndices.length}</span>
             </div>
           </div>
         </div>
 
-        {/* 主内容交互区 */}
         <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-8 min-h-0 overflow-hidden pb-4 md:pb-8">
-          
-          {/* 单词显示卡片 */}
           <div className="flex-1 flex flex-col items-center justify-center min-h-0">
             <div className={`w-full h-full rounded-3xl md:rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-6 md:p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.01] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''}`}>
               
@@ -192,7 +207,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
                 )}
               </div>
 
-              {/* 交互按钮区域 */}
               <div className="flex flex-col items-center space-y-3 md:space-y-4 w-full max-w-xs md:max-w-md shrink-0 mt-4 md:mt-10">
                 <button
                   onClick={() => setIsWordVisible(!isWordVisible)}
@@ -213,18 +227,13 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
             </div>
           </div>
 
-          {/* 右侧/底部控制台 */}
           <div className="w-full md:w-[320px] lg:w-[400px] flex flex-col shrink-0 space-y-4 md:space-y-8">
-            
             <div className="hidden md:block bg-white/5 backdrop-blur-2xl border border-white/10 p-6 lg:p-10 rounded-[2.5rem] lg:rounded-[3rem] shadow-xl">
               <div className="flex items-center justify-between mb-6 lg:mb-8 px-2">
                  <div className="flex items-center gap-2 lg:gap-3">
                    <Zap className="w-4 h-4 lg:w-5 lg:h-5 text-indigo-400" />
                    <span className="text-[10px] lg:text-[11px] font-black text-white uppercase tracking-widest opacity-80">语音引擎</span>
                  </div>
-                 <span className={`text-[8px] lg:text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-tighter ${selectedEngine === 'Web Speech' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-sky-500/20 text-sky-400'}`}>
-                   {selectedEngine === 'Web Speech' ? 'Offline' : 'Neural'}
-                 </span>
               </div>
               <button 
                 onClick={toggleEngine}
@@ -242,18 +251,11 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
 
             <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-4 md:p-8 lg:p-12 rounded-3xl md:rounded-[4rem] shadow-2xl flex-1 flex flex-col justify-center min-h-0">
               <div className="flex items-center justify-center space-x-6 md:space-x-10 mb-6 md:mb-16">
-                <button 
-                  onClick={handlePrevious} 
-                  disabled={currentIndex === 0} 
-                  className="w-14 h-14 md:w-18 md:h-18 lg:w-20 lg:h-20 rounded-2xl md:rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 disabled:opacity-10 transition-all active:scale-90 shadow-lg shrink-0"
-                >
+                <button onClick={handlePrevious} disabled={currentIndex === 0} className="w-14 h-14 md:w-18 md:h-18 lg:w-20 lg:h-20 rounded-2xl md:rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 disabled:opacity-10 transition-all active:scale-90 shadow-lg shrink-0">
                   <SkipBack className="w-5 h-5 md:w-8 md:h-8 fill-current" />
                 </button>
 
-                <button 
-                  onClick={handleManualPlay} 
-                  className={`w-24 h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-3xl md:rounded-[3rem] lg:rounded-[3.5rem] flex items-center justify-center transition-all duration-500 active:scale-[0.85] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] shrink-0 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/40' : 'bg-white text-slate-950 hover:scale-105'}`}
-                >
+                <button onClick={handleManualPlay} className={`w-24 h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-3xl md:rounded-[3rem] lg:rounded-[3.5rem] flex items-center justify-center transition-all duration-500 active:scale-[0.85] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] shrink-0 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/40' : 'bg-white text-slate-950 hover:scale-105'}`}>
                   {isPlaying ? (
                     <div className="flex items-center space-x-1.5 md:space-x-2">
                       <div className="w-2.5 md:w-3.5 h-8 md:h-12 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
@@ -263,10 +265,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
                   ) : <RotateCcw className="w-10 h-10 md:w-14 md:h-14" />}
                 </button>
 
-                <button 
-                  onClick={handleNext} 
-                  className="w-14 h-14 md:w-18 md:h-18 lg:w-20 lg:h-20 rounded-2xl md:rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-all active:scale-90 shadow-lg shrink-0"
-                >
+                <button onClick={handleNext} className="w-14 h-14 md:w-18 md:h-18 lg:w-20 lg:h-20 rounded-2xl md:rounded-3xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-all active:scale-90 shadow-lg shrink-0">
                   <SkipForward className="w-5 h-5 md:w-8 md:h-8 fill-current" />
                 </button>
               </div>
@@ -277,14 +276,10 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateLis
                   <span className="text-[8px] md:text-[10px] font-black text-indigo-400 uppercase tracking-widest">{Math.round(progress)}%</span>
                 </div>
                 <div className="h-2.5 md:h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 p-0.5">
-                  <div 
-                    className="h-full bg-gradient-to-r from-indigo-600 via-indigo-400 to-indigo-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_20px_rgba(99,102,241,0.5)]" 
-                    style={{ width: `${progress}%` }} 
-                  />
+                  <div className="h-full bg-gradient-to-r from-indigo-600 via-indigo-400 to-indigo-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_20px_rgba(99,102,241,0.5)]" style={{ width: `${progress}%` }} />
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </div>

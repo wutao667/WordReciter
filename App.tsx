@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [editingList, setEditingList] = useState<WordList | null>(null);
   const [currentStudyListId, setCurrentStudyListId] = useState<string | null>(null);
+  const [studyMode, setStudyMode] = useState<'all' | 'mistakes'>('all');
   const [listName, setListName] = useState('');
   const [wordsInput, setWordsInput] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -291,6 +292,11 @@ const App: React.FC = () => {
     stopListening();
   };
 
+  const handleStartStudy = (id: string, mode: 'all' | 'mistakes') => {
+    setStudyMode(mode);
+    setCurrentStudyListId(id);
+  };
+
   const handleUpdateWordsFromSession = (listId: string, newWords: string[]) => {
     setLists(prev => prev.map(l => l.id === listId ? { ...l, words: newWords } : l));
   };
@@ -327,7 +333,7 @@ const App: React.FC = () => {
               <WordListCard 
                 key={list.id} 
                 list={list} 
-                onSelect={setCurrentStudyListId} 
+                onSelect={handleStartStudy} 
                 onEdit={handleOpenModal} 
                 onDelete={(id) => { if(window.confirm('确定要删除这个词单吗？')) setLists(prev => prev.filter(l => l.id !== id)) }} 
               />
@@ -458,6 +464,7 @@ const App: React.FC = () => {
       {currentStudyList && (
         <StudySession 
           list={currentStudyList} 
+          mode={studyMode}
           onFinish={() => setCurrentStudyListId(null)} 
           onUpdateList={handleUpdateWordsFromSession}
         />
