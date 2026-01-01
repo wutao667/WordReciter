@@ -2,14 +2,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
 import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported } from '../services/geminiService';
-import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cloud } from 'lucide-react';
+import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cloud, Star } from 'lucide-react';
 
 interface StudySessionProps {
   list: WordList;
   onFinish: () => void;
+  onUpdateList: (listId: string, words: string[]) => void;
 }
 
-const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
+const StudySession: React.FC<StudySessionProps> = ({ list, onFinish, onUpdateList }) => {
   const [currentWords, setCurrentWords] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -42,8 +43,11 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
   }, [list.words, stopPlayback]);
 
   const startSequence = useCallback(async () => {
-    const word = currentWords[currentIndex];
-    if (!word) return;
+    const rawWord = currentWords[currentIndex];
+    if (!rawWord) return;
+    
+    // 自动剥离生错字标记再进行朗读
+    const wordToSpeak = rawWord.startsWith('*') ? rawWord.substring(1) : rawWord;
     
     stopPlayback();
     setHasError(false);
@@ -53,7 +57,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     setIsPlaying(true);
     
     try {
-      const repeatedText = `${word}; ${word}; ${word}.`;
+      const repeatedText = `${wordToSpeak}; ${wordToSpeak}; ${wordToSpeak}.`;
       const engineUsed = await speakWord(repeatedText, controller.signal, selectedEngine);
       
       if (isComponentMounted.current) {
@@ -101,8 +105,24 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
     setTimeout(() => handleManualPlay(), 10);
   };
 
+  const toggleErrorMark = () => {
+    const newWords = [...currentWords];
+    const isMarked = newWords[currentIndex].startsWith('*');
+    if (isMarked) {
+      newWords[currentIndex] = newWords[currentIndex].substring(1);
+    } else {
+      newWords[currentIndex] = '*' + newWords[currentIndex];
+    }
+    setCurrentWords(newWords);
+    // 即时通知父组件保存到 localStorage
+    onUpdateList(list.id, newWords);
+  };
+
   if (currentWords.length === 0) return null;
   const progress = ((currentIndex + 1) / currentWords.length) * 100;
+  const rawWord = currentWords[currentIndex];
+  const isMarked = rawWord?.startsWith('*');
+  const displayWord = isMarked ? rawWord.substring(1) : rawWord;
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 bg-slate-950 overflow-hidden">
@@ -113,7 +133,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
       </div>
 
       <div className="relative z-10 w-full max-w-7xl h-full flex flex-col min-h-0">
-        {/* 顶部纯净头部 - 移动端缩小尺寸 */}
+        {/* 顶部纯净头部 */}
         <div className="flex justify-between items-center bg-white/5 backdrop-blur-2xl px-4 py-3 md:px-6 md:py-5 rounded-2xl md:rounded-[2.5rem] border border-white/10 shadow-2xl mb-3 md:mb-8 shrink-0">
           <button 
             onClick={onFinish} 
@@ -135,10 +155,10 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
           </div>
         </div>
 
-        {/* 主内容交互区 - 移动端使用纵向布局 */}
+        {/* 主内容交互区 */}
         <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-8 min-h-0 overflow-hidden pb-4 md:pb-8">
           
-          {/* 单词显示卡片 - 移动端缩小内边距和圆角 */}
+          {/* 单词显示卡片 */}
           <div className="flex-1 flex flex-col items-center justify-center min-h-0">
             <div className={`w-full h-full rounded-3xl md:rounded-[4rem] bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-6 md:p-12 relative shadow-[0_0_100px_rgba(79,70,229,0.15)] transition-all duration-700 ${isPlaying ? 'scale-[1.01] border-indigo-500/30 shadow-[0_0_120px_rgba(79,70,229,0.25)]' : ''}`}>
               
@@ -149,9 +169,11 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
                     <button onClick={handleManualPlay} className="px-6 py-3 md:px-10 md:py-4 bg-amber-500 text-slate-900 rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black shadow-lg hover:scale-105 active:scale-95 transition-all">重新播放音频</button>
                   </div>
                 ) : isWordVisible ? (
-                  <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-9xl font-black tracking-tighter text-white animate-in zoom-in-95 duration-500 break-words px-4 md:px-8 drop-shadow-2xl max-w-full overflow-hidden">
-                    {currentWords[currentIndex]}
-                  </h1>
+                  <div className="flex flex-col items-center">
+                    <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-9xl font-black tracking-tighter text-white animate-in zoom-in-95 duration-500 break-words px-4 md:px-8 drop-shadow-2xl max-w-full overflow-hidden">
+                      {displayWord}
+                    </h1>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center space-y-6 md:space-y-12">
                     <div className="flex space-x-3 md:space-x-5">
@@ -170,21 +192,30 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
                 )}
               </div>
 
-              {/* 答案切换按钮 - 移动端缩小尺寸 */}
-              <button
-                onClick={() => setIsWordVisible(!isWordVisible)}
-                className={`mt-4 md:mt-10 px-8 md:px-16 py-4 md:py-8 rounded-2xl md:rounded-[2.5rem] flex items-center space-x-3 md:space-x-4 transition-all duration-500 font-black text-[10px] md:text-xs uppercase tracking-widest active:scale-95 shrink-0 select-none ${isWordVisible ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-500/40 border-transparent' : 'bg-white/10 text-slate-400 hover:bg-white/20 border border-white/10'}`}
-              >
-                {isWordVisible ? <EyeOff className="w-5 h-5 md:w-6 md:h-6" /> : <Eye className="w-5 h-5 md:w-6 md:h-6" />}
-                <span>{isWordVisible ? '隐藏拼写' : '查看拼写'}</span>
-              </button>
+              {/* 交互按钮区域 */}
+              <div className="flex flex-col items-center space-y-3 md:space-y-4 w-full max-w-xs md:max-w-md shrink-0 mt-4 md:mt-10">
+                <button
+                  onClick={() => setIsWordVisible(!isWordVisible)}
+                  className={`w-full px-8 md:px-16 py-4 md:py-7 rounded-2xl md:rounded-[2.5rem] flex items-center justify-center space-x-3 md:space-x-4 transition-all duration-500 font-black text-[10px] md:text-xs uppercase tracking-widest active:scale-95 select-none ${isWordVisible ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-500/40 border-transparent' : 'bg-white/10 text-slate-400 hover:bg-white/20 border border-white/10'}`}
+                >
+                  {isWordVisible ? <EyeOff className="w-5 h-5 md:w-6 md:h-6" /> : <Eye className="w-5 h-5 md:w-6 md:h-6" />}
+                  <span>{isWordVisible ? '隐藏拼写' : '查看拼写'}</span>
+                </button>
+
+                <button
+                  onClick={toggleErrorMark}
+                  className={`w-full px-6 py-3 md:py-5 rounded-xl md:rounded-3xl flex items-center justify-center space-x-2 md:space-x-3 transition-all duration-300 font-black text-[9px] md:text-[11px] uppercase tracking-widest active:scale-95 select-none border-2 ${isMarked ? 'bg-rose-500/20 border-rose-500/50 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.15)]' : 'bg-white/5 border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-400'}`}
+                >
+                  <Star className={`w-4 h-4 md:w-5 md:h-5 ${isMarked ? 'fill-current animate-pulse' : ''}`} />
+                  <span>{isMarked ? '标记为生错字' : '设为生错字'}</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* 右侧/底部控制台 - 移动端改为紧凑布局 */}
+          {/* 右侧/底部控制台 */}
           <div className="w-full md:w-[320px] lg:w-[400px] flex flex-col shrink-0 space-y-4 md:space-y-8">
             
-            {/* 引擎状态卡片 - 移动端隐藏以节省空间，除非在平板尺寸以上 */}
             <div className="hidden md:block bg-white/5 backdrop-blur-2xl border border-white/10 p-6 lg:p-10 rounded-[2.5rem] lg:rounded-[3rem] shadow-xl">
               <div className="flex items-center justify-between mb-6 lg:mb-8 px-2">
                  <div className="flex items-center gap-2 lg:gap-3">
@@ -209,7 +240,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
               </button>
             </div>
 
-            {/* 核心播放控制 - 移动端高度调整 */}
             <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-4 md:p-8 lg:p-12 rounded-3xl md:rounded-[4rem] shadow-2xl flex-1 flex flex-col justify-center min-h-0">
               <div className="flex items-center justify-center space-x-6 md:space-x-10 mb-6 md:mb-16">
                 <button 
@@ -241,7 +271,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, onFinish }) => {
                 </button>
               </div>
 
-              {/* 视觉进度条 - 移动端简化布局 */}
               <div className="w-full px-2">
                 <div className="flex justify-between items-end mb-2 md:mb-4">
                   <span className="text-[8px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Dictation</span>

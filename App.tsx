@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
@@ -290,6 +291,10 @@ const App: React.FC = () => {
     stopListening();
   };
 
+  const handleUpdateWordsFromSession = (listId: string, newWords: string[]) => {
+    setLists(prev => prev.map(l => l.id === listId ? { ...l, words: newWords } : l));
+  };
+
   const currentStudyList = lists.find(l => l.id === currentStudyListId);
 
   return (
@@ -454,6 +459,7 @@ const App: React.FC = () => {
         <StudySession 
           list={currentStudyList} 
           onFinish={() => setCurrentStudyListId(null)} 
+          onUpdateList={handleUpdateWordsFromSession}
         />
       )}
     </div>
