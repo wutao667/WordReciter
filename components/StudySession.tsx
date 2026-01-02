@@ -12,12 +12,12 @@ interface StudySessionProps {
 }
 
 const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpdateList }) => {
-  // activeIndices 存储当前会话中需要练习的单词在原始 list.words 中的索引
   const [activeIndices, setActiveIndices] = useState<number[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0); // 这是针对 activeIndices 的索引
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWordVisible, setIsWordVisible] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   
   const [selectedEngine, setSelectedEngine] = useState<'Web Speech' | 'AI-TTS'>(getPreferredTTSEngine());
   const [activeEngine, setActiveEngine] = useState<'Web Speech' | 'AI-TTS'>(selectedEngine);
@@ -25,6 +25,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
 
   const isComponentMounted = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   const stopPlayback = useCallback(() => {
     if (abortControllerRef.current) {
@@ -35,7 +36,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     setIsPlaying(false);
   }, []);
 
-  // 根据模式初始化活动索引
   useEffect(() => {
     isComponentMounted.current = true;
     const indices: number[] = [];
@@ -45,7 +45,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
       }
     }
     
-    // 如果是仅生词模式但没有生词，自动结束
     if (indices.length === 0) {
       onFinish();
       return;
@@ -58,7 +57,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     };
   }, [list.words, mode, onFinish, stopPlayback]);
 
-  // 获取当前正在学习的原始单词索引和值
   const currentMasterIndex = activeIndices[currentIndex];
   const rawWord = list.words[currentMasterIndex];
 
@@ -67,7 +65,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     const wordValue = list.words[currentMasterIndex];
     if (!wordValue) return;
     
-    // 自动剥离生错字标记再进行朗读
     const wordToSpeak = wordValue.startsWith('*') ? wordValue.substring(1) : wordValue;
     
     stopPlayback();
@@ -96,39 +93,81 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     }
   }, [list.words, currentMasterIndex, stopPlayback, selectedEngine]);
 
-  const handleManualPlay = () => {
-    startSequence();
-  };
-
   useEffect(() => {
-    if (activeIndices.length > 0) {
+    // 拖动过程中不自动开始朗读
+    if (activeIndices.length > 0 && !isDragging) {
       startSequence();
     }
     return () => stopPlayback();
-  }, [currentIndex, activeIndices, startSequence, stopPlayback]);
+  }, [currentIndex, activeIndices, startSequence, stopPlayback, isDragging]);
 
   const handleNext = () => {
     currentIndex < activeIndices.length - 1 ? setCurrentIndex(prev => prev + 1) : onFinish();
-    // 移除了 setIsWordVisible(false)，使显隐状态在切换单词时保持
   };
 
   const handlePrevious = () => {
     if (currentIndex > 0) {
       setCurrentIndex(prev => prev - 1);
-      // 移除了 setIsWordVisible(false)，使显隐状态在切换单词时保持
     }
   };
+
+  const updateIndexFromEvent = (e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) => {
+    if (!progressRef.current || activeIndices.length === 0) return;
+    const rect = progressRef.current.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const percentage = offsetX / rect.width;
+    const newIndex = Math.min(
+      activeIndices.length - 1,
+      Math.floor(percentage * activeIndices.length)
+    );
+    if (newIndex !== currentIndex) {
+      setCurrentIndex(newIndex);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    setIsDragging(true);
+    updateIndexFromEvent(e);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent | TouchEvent) => {
+      if (isDragging) {
+        updateIndexFromEvent(e);
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging) {
+        setIsDragging(false);
+      }
+    };
+
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('touchmove', handleMouseMove);
+      window.addEventListener('touchend', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleMouseMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [isDragging]);
 
   const toggleEngine = () => {
     if (!localAvailable && selectedEngine === 'AI-TTS') return;
     const next = selectedEngine === 'Web Speech' ? 'AI-TTS' : 'Web Speech';
     setSelectedEngine(next);
-    setTimeout(() => handleManualPlay(), 10);
+    setTimeout(() => startSequence(), 10);
   };
 
   const toggleErrorMark = () => {
     if (currentMasterIndex === undefined) return;
-    
     const newMasterWords = [...list.words];
     const isMarked = newMasterWords[currentMasterIndex].startsWith('*');
     if (isMarked) {
@@ -136,8 +175,6 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     } else {
       newMasterWords[currentMasterIndex] = '*' + newMasterWords[currentMasterIndex];
     }
-    
-    // 即时通知父组件保存原始词单
     onUpdateList(list.id, newMasterWords);
   };
 
@@ -181,7 +218,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
                 {hasError ? (
                   <div className="flex flex-col items-center space-y-4 md:space-y-6 text-amber-400 p-4">
                     <AlertTriangle className="w-12 h-12 md:w-16 md:h-16 opacity-50" />
-                    <button onClick={handleManualPlay} className="px-6 py-3 md:px-10 md:py-4 bg-amber-500 text-slate-900 rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black shadow-lg hover:scale-105 active:scale-95 transition-all">重新播放音频</button>
+                    <button onClick={() => startSequence()} className="px-6 py-3 md:px-10 md:py-4 bg-amber-500 text-slate-900 rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black shadow-lg hover:scale-105 active:scale-95 transition-all">重新播放音频</button>
                   </div>
                 ) : isWordVisible ? (
                   <div className="flex flex-col items-center">
@@ -255,7 +292,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
                   <SkipBack className="w-5 h-5 md:w-8 md:h-8 fill-current" />
                 </button>
 
-                <button onClick={handleManualPlay} className={`w-24 h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-3xl md:rounded-[3rem] lg:rounded-[3.5rem] flex items-center justify-center transition-all duration-500 active:scale-[0.85] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] shrink-0 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/40' : 'bg-white text-slate-950 hover:scale-105'}`}>
+                <button onClick={() => startSequence()} className={`w-24 h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-3xl md:rounded-[3rem] lg:rounded-[3.5rem] flex items-center justify-center transition-all duration-500 active:scale-[0.85] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] shrink-0 ${isPlaying ? 'bg-indigo-600 text-white shadow-indigo-500/40' : 'bg-white text-slate-950 hover:scale-105'}`}>
                   {isPlaying ? (
                     <div className="flex items-center space-x-1.5 md:space-x-2">
                       <div className="w-2.5 md:w-3.5 h-8 md:h-12 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
@@ -275,8 +312,21 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
                   <span className="text-[8px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">进度</span>
                   <span className="text-[8px] md:text-[10px] font-black text-indigo-400 uppercase tracking-widest">{Math.round(progress)}%</span>
                 </div>
-                <div className="h-2.5 md:h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 p-0.5">
-                  <div className="h-full bg-gradient-to-r from-indigo-600 via-indigo-400 to-indigo-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_20px_rgba(99,102,241,0.5)]" style={{ width: `${progress}%` }} />
+                <div 
+                  ref={progressRef}
+                  onMouseDown={handleMouseDown}
+                  onTouchStart={handleMouseDown}
+                  className="h-4 md:h-6 w-full bg-white/5 rounded-full border border-white/10 p-0.5 relative cursor-pointer group"
+                >
+                  <div 
+                    className={`h-full bg-gradient-to-r from-indigo-600 via-indigo-400 to-indigo-500 rounded-full transition-all shadow-[0_0_20px_rgba(99,102,241,0.5)] ${isDragging ? 'duration-0' : 'duration-500'}`} 
+                    style={{ width: `${progress}%` }} 
+                  />
+                  {/* 可拖拽指示球 */}
+                  <div 
+                    className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 bg-white rounded-full shadow-lg border-2 border-indigo-500 transition-all ${isDragging ? 'scale-125 duration-0' : 'duration-500'}`}
+                    style={{ left: `calc(${progress}% - 8px)` }}
+                  />
                 </div>
               </div>
             </div>
