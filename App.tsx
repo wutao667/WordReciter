@@ -5,7 +5,7 @@ import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
 import DebugConsole from './components/DebugConsole';
 import { extractWordsFromImage } from './services/geminiService';
-import { Plus, Mic, Sparkles, Loader2, Zap, Layout, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal, Info, Shuffle, X, Languages } from 'lucide-react';
+import { Plus, Mic, Sparkles, Loader2, Zap, Layout, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal, Info, Shuffle, X, Languages, Copy, Check } from 'lucide-react';
 
 interface AnalysisStep {
   id: string;
@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
+  const [copySuccess, setCopySuccess] = useState(false);
   
   // OCR 语种选择状态
   const [ocrLangs, setOcrLangs] = useState<{ zh: boolean, en: boolean }>({ zh: true, en: true });
@@ -273,6 +274,7 @@ const App: React.FC = () => {
     }
     setErrorMsg(null);
     setIsModalOpen(true);
+    setCopySuccess(false);
   };
 
   const handleShuffleInput = () => {
@@ -280,6 +282,14 @@ const App: React.FC = () => {
     if (words.length <= 1) return;
     const shuffled = [...words].sort(() => Math.random() - 0.5);
     setWordsInput(shuffled.join('\n'));
+  };
+
+  const handleCopyInput = () => {
+    if (!wordsInput.trim()) return;
+    navigator.clipboard.writeText(wordsInput).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    });
   };
 
   const handleSaveList = (e: React.FormEvent) => {
@@ -436,14 +446,24 @@ const App: React.FC = () => {
                   <div className="flex flex-col h-full space-y-3">
                     <div className="flex justify-between items-center px-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">单词明细 (每行一个)</label>
-                      <button 
-                        type="button" 
-                        onClick={handleShuffleInput}
-                        className="px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white text-[10px] font-black transition-all flex items-center gap-1.5 active:scale-95"
-                      >
-                        <Shuffle className="w-3 h-3" />
-                        打乱顺序
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          type="button" 
+                          onClick={handleCopyInput}
+                          className={`px-3 py-1.5 rounded-full text-[10px] font-black transition-all flex items-center gap-1.5 active:scale-95 ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-indigo-600 hover:text-white'}`}
+                        >
+                          {copySuccess ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          {copySuccess ? '复制成功' : '复制列表'}
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={handleShuffleInput}
+                          className="px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white text-[10px] font-black transition-all flex items-center gap-1.5 active:scale-95"
+                        >
+                          <Shuffle className="w-3 h-3" />
+                          打乱顺序
+                        </button>
+                      </div>
                     </div>
                     <div className="relative flex-1 group">
                       <textarea 
