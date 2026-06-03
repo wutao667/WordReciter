@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ShieldCheck, Trash2, Zap, Globe, Volume2, PlayCircle, Loader2, Sparkles, AlertCircle, Info, Languages, Monitor, Smartphone, MessageSquare, Terminal, Copy, CheckCircle2, Cloud, MapPin, Camera, Search, Upload, Image as ImageIcon } from 'lucide-react';
-import { testGeminiConnectivity, speakWithAiTTS, speakWordLocal, speakWithAzureTTS, AZURE_REGION, diagnoseVisionProcess } from '../services/geminiService';
+import { testGeminiConnectivity, speakWithAiTTS, speakWordLocal, speakWithEdgeTTS, diagnoseVisionProcess } from '../services/geminiService';
 
 interface DebugConsoleProps {
   onClose: () => void;
@@ -149,15 +149,15 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     setIsTestingVision(false);
   };
 
-  const testTTS = async (mode: 'local' | 'ai' | 'azure') => {
+  const testTTS = async (mode: 'local' | 'ai' | 'edge') => {
     setIsTestingTTS(true);
     const testText = "Hello, this is LingoEcho testing the voice quality. 欢迎使用听写助手。";
-    addLog('info', `尝试 [${mode === 'local' ? '本地' : mode === 'ai' ? 'GLM 云端' : 'Azure 神经网络'}] 语音合成...`);
+    addLog('info', `尝试 [${mode === 'local' ? '本地' : mode === 'ai' ? 'GLM 云端' : 'Edge TTS'}] 语音合成...`);
     
     try {
       if (mode === 'local') await speakWordLocal(testText);
       else if (mode === 'ai') await speakWithAiTTS(testText);
-      else await speakWithAzureTTS(testText);
+      else await speakWithEdgeTTS(testText);
       addLog('success', `${mode.toUpperCase()} 播报成功`);
     } catch (err: any) {
       addLog('error', `${mode.toUpperCase()} 播报失败: ${err.message}`);
@@ -322,8 +322,8 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                 </div>
                 <div className="bg-white p-5 rounded-2xl border border-sky-50 shadow-sm space-y-4">
                   <div className="flex justify-between items-start"><Cloud className="w-4 h-4 text-sky-500" /></div>
-                  <h4 className="font-black text-xs text-slate-800">Azure 神经网络</h4>
-                  <button onClick={() => testTTS('azure')} disabled={isTestingTTS} className="w-full py-3 bg-sky-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-sky-100 transition-all">云端测试</button>
+                  <h4 className="font-black text-xs text-slate-800">Edge TTS</h4>
+                  <button onClick={() => testTTS('edge')} disabled={isTestingTTS} className="w-full py-3 bg-sky-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-sky-100 transition-all">云端测试</button>
                 </div>
               </div>
             )}

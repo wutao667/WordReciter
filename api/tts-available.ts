@@ -10,14 +10,16 @@ export default async function handler(req: Request) {
     });
   }
 
+  const edge = true;
   const azure = !!process.env.AZURE_API_KEY;
   const glm = !!process.env.GLM_API_KEY;
 
   return new Response(JSON.stringify({
+    edge,
     azure,
     glm,
-    available: azure || glm,
-    preferred: azure ? 'azure' : glm ? 'glm' : null
+    available: edge || azure || glm,
+    preferred: edge ? 'edge' : azure ? 'azure' : glm ? 'glm' : null
   }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' }

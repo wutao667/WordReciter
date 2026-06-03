@@ -6,12 +6,12 @@
 
 const PROXY_OCR_ENDPOINT = '/api/ocr';
 const GLM_TTS_ENDPOINT = '/api/tts-glm';
-const AZURE_TTS_ENDPOINT = '/api/tts-azure';
+const EDGE_TTS_ENDPOINT = '/api/tts-edge';
 const TTS_AVAILABLE_ENDPOINT = '/api/tts-available';
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 let currentAudio: HTMLAudioElement | null = null;
-let ttsAvailability: { azure: boolean; glm: boolean; available: boolean } | null = null;
+let ttsAvailability: { edge: boolean; azure: boolean; glm: boolean; available: boolean } | null = null;
 let ttsAvailabilityPromise: Promise<typeof ttsAvailability> | null = null;
 
 /**
@@ -146,6 +146,7 @@ const loadTTSAvailability = async () => {
       })
       .then((data) => {
         ttsAvailability = {
+          edge: !!data.edge,
           azure: !!data.azure,
           glm: !!data.glm,
           available: !!data.available
@@ -153,7 +154,7 @@ const loadTTSAvailability = async () => {
         return ttsAvailability;
       })
       .catch(() => {
-        ttsAvailability = { azure: false, glm: false, available: false };
+        ttsAvailability = { edge: false, azure: false, glm: false, available: false };
         return ttsAvailability;
       });
   }
@@ -179,18 +180,18 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
   }
 };
 
-export const speakWithAzureTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
+export const speakWithEdgeTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
   stopAllSpeech();
   const isChinese = /[\u4e00-\u9fa5]/.test(text);
   const voiceName = isChinese ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AvaMultilingualNeural';
   try {
-    const response = await fetch(AZURE_TTS_ENDPOINT, {
+    const response = await fetch(EDGE_TTS_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: signal,
       body: JSON.stringify({ text, voice: voiceName, speed: 0.6 })
     });
-    if (!response.ok) throw new Error(`Azure TTS 错误: ${response.status}`);
+    if (!response.ok) throw new Error(`Edge TTS 错误: ${response.status}`);
     const blob = await response.blob();
     if (signal?.aborted) throw new Error("AbortError");
     await playAudioBlob(blob, signal);
@@ -214,8 +215,8 @@ export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine
   const availability = await loadTTSAvailability();
   const engineToUse = forcedEngine || (availability?.available ? 'AI-TTS' : 'Web Speech');
   if (engineToUse === 'AI-TTS') {
-    if (availability?.azure) {
-      try { await speakWithAzureTTS(text, signal); return 'AI-TTS'; } catch (err: any) { if (err.message === 'AbortError') throw err; }
+    if (availability?.edge) {
+      try { await speakWithEdgeTTS(text, signal); return 'AI-TTS'; } catch (err: any) { if (err.message === 'AbortError') throw err; }
     }
     if (availability?.glm) { await speakWithAiTTS(text, signal); return 'AI-TTS'; }
   }
