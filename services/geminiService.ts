@@ -5,13 +5,14 @@
  */
 
 const PROXY_OCR_ENDPOINT = '/api/ocr';
-const AI_TTS_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/audio/speech';
-
-export const AZURE_REGION = process.env.AZURE_REGION || 'eastasia'; 
-const AZURE_TTS_ENDPOINT = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
+const GLM_TTS_ENDPOINT = '/api/tts-glm';
+const AZURE_TTS_ENDPOINT = '/api/tts-azure';
+const TTS_AVAILABLE_ENDPOINT = '/api/tts-available';
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 let currentAudio: HTMLAudioElement | null = null;
+let ttsAvailability: { azure: boolean; glm: boolean; available: boolean } | null = null;
+let ttsAvailabilityPromise: Promise<typeof ttsAvailability> | null = null;
 
 /**
  * 通用的带类型检查的 Fetch 封装，防止解析非 JSON 数据
@@ -132,14 +133,41 @@ const playAudioBlob = async (blob: Blob, signal?: AbortSignal): Promise<void> =>
   });
 };
 
+const loadTTSAvailability = async () => {
+  if (ttsAvailability) return ttsAvailability;
+  if (!ttsAvailabilityPromise) {
+    ttsAvailabilityPromise = fetch(TTS_AVAILABLE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`TTS 探测失败: ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        ttsAvailability = {
+          azure: !!data.azure,
+          glm: !!data.glm,
+          available: !!data.available
+        };
+        return ttsAvailability;
+      })
+      .catch(() => {
+        ttsAvailability = { azure: false, glm: false, available: false };
+        return ttsAvailability;
+      });
+  }
+  return ttsAvailabilityPromise;
+};
+
 export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
   stopAllSpeech(); 
   try {
-    const response = await fetch(AI_TTS_ENDPOINT, {
+    const response = await fetch(GLM_TTS_ENDPOINT, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${process.env.GLM_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       signal: signal,
-      body: JSON.stringify({ model: "glm-tts", input: text, voice: "female", speed: 0.6, volume: 1.0, response_format: "wav" })
+      body: JSON.stringify({ text, voice: "female", speed: 0.6 })
     });
     if (!response.ok) throw new Error(`GLM 语音失败: ${response.status}`);
     const blob = await response.blob();
@@ -153,17 +181,14 @@ export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promis
 
 export const speakWithAzureTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
   stopAllSpeech();
-  if (!process.env.AZURE_API_KEY) throw new Error("AZURE_API_KEY 未配置");
   const isChinese = /[\u4e00-\u9fa5]/.test(text);
   const voiceName = isChinese ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AvaMultilingualNeural';
-  const lang = isChinese ? 'zh-CN' : 'en-US';
-  const ssml = `<speak version='1.0' xml:lang='${lang}'><voice name='${voiceName}'><prosody rate='0.6'>${text}</prosody></voice></speak>`;
   try {
     const response = await fetch(AZURE_TTS_ENDPOINT, {
       method: 'POST',
-      headers: { 'Ocp-Apim-Subscription-Key': process.env.AZURE_API_KEY, 'Content-Type': 'application/ssml+xml', 'X-Microsoft-OutputFormat': 'audio-16khz-128kbitrate-mono-mp3', 'User-Agent': 'LingoEcho' },
+      headers: { 'Content-Type': 'application/json' },
       signal: signal,
-      body: ssml
+      body: JSON.stringify({ text, voice: voiceName, speed: 0.6 })
     });
     if (!response.ok) throw new Error(`Azure TTS 错误: ${response.status}`);
     const blob = await response.blob();
@@ -180,15 +205,19 @@ export const isLocalTTSSupported = (): boolean => {
   return !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
 };
 
-export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => (process.env.AZURE_API_KEY || process.env.GLM_API_KEY) ? 'AI-TTS' : 'Web Speech';
+export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
+  loadTTSAvailability();
+  return ttsAvailability?.available === false ? 'Web Speech' : 'AI-TTS';
+};
 
 export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine?: 'Web Speech' | 'AI-TTS'): Promise<'Web Speech' | 'AI-TTS'> => {
-  const engineToUse = forcedEngine || getPreferredTTSEngine();
+  const availability = await loadTTSAvailability();
+  const engineToUse = forcedEngine || (availability?.available ? 'AI-TTS' : 'Web Speech');
   if (engineToUse === 'AI-TTS') {
-    if (process.env.AZURE_API_KEY) {
+    if (availability?.azure) {
       try { await speakWithAzureTTS(text, signal); return 'AI-TTS'; } catch (err: any) { if (err.message === 'AbortError') throw err; }
     }
-    if (process.env.GLM_API_KEY) { await speakWithAiTTS(text, signal); return 'AI-TTS'; }
+    if (availability?.glm) { await speakWithAiTTS(text, signal); return 'AI-TTS'; }
   }
   await speakWordLocal(text, signal);
   return 'Web Speech';
