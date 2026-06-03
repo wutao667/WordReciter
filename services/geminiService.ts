@@ -11,7 +11,7 @@ const TTS_AVAILABLE_ENDPOINT = '/api/tts-available';
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 let currentAudio: HTMLAudioElement | null = null;
-let ttsAvailability: { edge: boolean; azure: boolean; glm: boolean; available: boolean } | null = null;
+let ttsAvailability: { edge: boolean; glm: boolean; available: boolean } | null = null;
 let ttsAvailabilityPromise: Promise<typeof ttsAvailability> | null = null;
 
 /**
@@ -147,14 +147,13 @@ const loadTTSAvailability = async () => {
       .then((data) => {
         ttsAvailability = {
           edge: !!data.edge,
-          azure: !!data.azure,
           glm: !!data.glm,
           available: !!data.available
         };
         return ttsAvailability;
       })
       .catch(() => {
-        ttsAvailability = { edge: false, azure: false, glm: false, available: false };
+        ttsAvailability = { edge: true, glm: false, available: true };
         return ttsAvailability;
       });
   }
