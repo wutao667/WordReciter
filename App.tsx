@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WordList } from './types';
 import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
-import DebugConsole from './components/DebugConsole';
+import DebugConsole from "./components/DebugConsole";
 import { extractWordsFromImage } from './services/geminiService';
-import { Plus, Mic, Sparkles, Loader2, Zap, Layout, AlertCircle, Bug, Camera, Image as ImageIcon, CheckCircle2, Terminal, Info, Shuffle, X, Languages, Copy, Check } from 'lucide-react';
+import { Plus, Mic, Loader2, Zap, Layout, AlertCircle, Camera, Image as ImageIcon, CheckCircle2, Terminal, Shuffle, X, Languages, Copy, Check, Bug } from "lucide-react";
 
 interface AnalysisStep {
   id: string;
@@ -17,7 +17,6 @@ interface AnalysisStep {
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [editingList, setEditingList] = useState<WordList | null>(null);
   const [currentStudyListId, setCurrentStudyListId] = useState<string | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'mistakes'>('all');
@@ -33,6 +32,7 @@ const App: React.FC = () => {
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
   const [copySuccess, setCopySuccess] = useState(false);
+  const [isDebugOpen, setIsDebugOpen] = useState(false);
   
   // OCR 语种选择状态
   const [ocrLangs, setOcrLangs] = useState<{ zh: boolean, en: boolean }>({ zh: true, en: true });
@@ -58,13 +58,6 @@ const App: React.FC = () => {
   ];
 
   useEffect(() => {
-    if (isDebugOpen && recognitionRef.current) {
-      stopListening();
-      recognitionRef.current = null;
-    }
-  }, [isDebugOpen]);
-
-  useEffect(() => {
     pendingLangRef.current = pendingLang;
   }, [pendingLang]);
 
@@ -72,6 +65,13 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('lingo-echo-lists');
     if (saved) try { setLists(JSON.parse(saved)); } catch (e) {}
   }, []);
+
+  useEffect(() => {
+    if (isDebugOpen && recognitionRef.current) {
+      stopListening();
+      recognitionRef.current = null;
+    }
+  }, [isDebugOpen]);
 
   useEffect(() => { localStorage.setItem('lingo-echo-lists', JSON.stringify(lists)); }, [lists]);
 
@@ -319,30 +319,30 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen pb-20">
-      <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto h-16 sm:h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 transition-transform active:scale-95">
-              <Zap className="w-6 h-6 text-white" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 bg-indigo-600 rounded-button flex items-center justify-center shadow-button transition-transform active:scale-95">
+              <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
-            <span className="text-2xl font-black tracking-tight text-slate-900 leading-none">听写助手</span>
+            <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-none">听写助手</span>
           </div>
-          <div className="flex gap-3">
-            <button onClick={() => setIsDebugOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-500 p-3 rounded-2xl transition-all"><Bug className="w-4 h-4" /></button>
-            <button onClick={() => handleOpenModal()} className="bg-slate-900 hover:bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-xl flex items-center gap-2 text-sm"><Plus className="w-4 h-4 stroke-[3px]" /><span>新建词单</span></button>
+          <div className="flex items-center justify-end min-w-[9rem]">
+            <button onClick={() => setIsDebugOpen(true)} className="min-h-[44px] w-11 h-11 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-white rounded-button transition-all border border-transparent hover:border-indigo-100 shadow-sm"><Bug className="w-4 h-4" /></button>
+            <button onClick={() => handleOpenModal()} className="min-h-[44px] bg-slate-900 hover:bg-indigo-600 text-white px-5 sm:px-6 py-3 rounded-button font-bold transition-all shadow-button flex items-center gap-2 text-button"><Plus className="w-4 h-4 stroke-[3px]" /><span>新建词单</span></button>
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-6 mt-16">
-        <h2 className="text-5xl font-black text-slate-900 tracking-tighter mb-4 lg:mb-8">你的 <span className="text-indigo-600">单词工坊</span></h2>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 mt-8">
+        <h2 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight mb-5 lg:mb-8">你的 <span className="text-indigo-600">单词工坊</span></h2>
         {lists.length === 0 ? (
-          <div className="py-32 bg-white/40 rounded-[3rem] border flex flex-col items-center border-dashed border-slate-300">
+          <div className="py-24 sm:py-32 bg-white/40 rounded-card border flex flex-col items-center border-dashed border-slate-300">
             <Layout className="w-12 h-12 text-indigo-300 mb-6" />
             <h3 className="text-2xl font-bold text-slate-400">库中空空如也，开始创建吧</h3>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             {lists.map(list => (
               <WordListCard 
                 key={list.id} 
@@ -356,38 +356,36 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {isDebugOpen && <DebugConsole onClose={() => setIsDebugOpen(false)} />}
-
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/25 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl border overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[95vh]">
-            <div className="px-10 py-6 border-b flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">词单配置</h2>
-              <button onClick={() => { setIsModalOpen(false); stopListening(); }} className="text-slate-300 hover:text-red-500 transition-colors p-2">
-                <X className="w-8 h-8" />
+          <div className="bg-white rounded-modal shadow-modal w-[calc(100vw-2rem)] max-w-lg border overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[95vh]">
+            <div className="px-6 py-5 border-b flex justify-between items-center bg-slate-50/50">
+              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">词单配置</h2>
+              <button onClick={() => { setIsModalOpen(false); stopListening(); }} className="text-slate-300 hover:text-red-500 transition-colors p-2 rounded-button">
+                <X className="w-6 h-6" />
               </button>
             </div>
             
             <form onSubmit={handleSaveList} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                  <div className="space-y-8">
+              <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                <div className="grid grid-cols-1 gap-6">
+                  <div className="space-y-6">
                     <div className="space-y-3">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">词单标题</label>
+                      <label className="text-label text-slate-400 uppercase ml-2">词单标题</label>
                       <input 
                         value={listName} 
                         onChange={e => setListName(e.target.value)} 
                         placeholder="例如：GRE核心词汇..." 
-                        className="w-full px-6 py-5 rounded-2xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all shadow-inner" 
+                        className="w-full px-5 py-4 rounded-input bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all shadow-input" 
                       />
                     </div>
                     
-                    <div className="space-y-6">
+                    <div className="space-y-5">
                       {/* OCR 语种选择 UI */}
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 ml-2">
                           <Languages className="w-3 h-3 text-indigo-500" />
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">识别语种 (拍照/识图)</label>
+                          <label className="text-label text-slate-400 uppercase">识别语种 (拍照/识图)</label>
                         </div>
                         <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
                           {[
@@ -399,7 +397,7 @@ const App: React.FC = () => {
                               key={opt.id}
                               type="button"
                               onClick={() => setOcrLangs(opt.state)}
-                              className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                              className={`flex-1 min-h-[44px] py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
                                 ocrLangs.zh === opt.state.zh && ocrLangs.en === opt.state.en
                                   ? 'bg-white text-indigo-600 shadow-sm'
                                   : 'text-slate-400 hover:text-slate-600'
@@ -412,16 +410,16 @@ const App: React.FC = () => {
                       </div>
 
                       <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">快速录入工具</label>
+                        <label className="text-label text-slate-400 uppercase ml-2">快速录入工具</label>
                         <div className="flex flex-wrap gap-2">
                           {!isMobile && (
                             <>
-                              <button type="button" onClick={() => toggleListening('en-US')} className={`px-4 py-3 rounded-full text-[10px] font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}><Mic className="w-3.5 h-3.5" /> 英文听写</button>
-                              <button type="button" onClick={() => toggleListening('zh-CN')} className={`px-4 py-3 rounded-full text-[10px] font-black transition-all flex items-center gap-2 ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}><Mic className="w-3.5 h-3.5" /> 中文听写</button>
+                              <button type="button" onClick={() => toggleListening('en-US')} className={`min-h-[44px] px-4 py-3 rounded-badge text-button transition-all flex items-center gap-2 ${isListening && listeningLang === 'en-US' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}><Mic className="w-3.5 h-3.5" /> 英文听写</button>
+                              <button type="button" onClick={() => toggleListening('zh-CN')} className={`min-h-[44px] px-4 py-3 rounded-badge text-button transition-all flex items-center gap-2 ${isListening && listeningLang === 'zh-CN' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}><Mic className="w-3.5 h-3.5" /> 中文听写</button>
                             </>
                           )}
-                          <button type="button" onClick={() => cameraInputRef.current?.click()} className="px-4 py-3 rounded-full text-[10px] font-black bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all flex items-center gap-2"><Camera className="w-3.5 h-3.5" /> 拍照识词</button>
-                          <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-3 rounded-full text-[10px] font-black bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-2"><ImageIcon className="w-3.5 h-3.5" /> 相册选择</button>
+                          <button type="button" onClick={() => cameraInputRef.current?.click()} className="min-h-[44px] px-4 py-3 rounded-badge text-button bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all flex items-center gap-2"><Camera className="w-3.5 h-3.5" /> 拍照识词</button>
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className="min-h-[44px] px-4 py-3 rounded-badge text-button bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-2"><ImageIcon className="w-3.5 h-3.5" /> 相册选择</button>
                           <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
                           <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} />
                         </div>
@@ -429,13 +427,13 @@ const App: React.FC = () => {
                           <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl">
                             <div className="flex items-center gap-2 mb-1.5">
                               <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
-                              <span className="text-[9px] font-black uppercase tracking-widest opacity-80">正在倾听...</span>
+                              <span className="text-xs font-black uppercase tracking-widest opacity-80">正在倾听...</span>
                             </div>
                             <p className="text-xs italic font-medium truncate">{interimText || "请说话..."}</p>
                           </div>
                         )}
                         {errorMsg && (
-                          <div className="flex items-center gap-2 text-red-500 text-[10px] font-bold px-4 py-3 bg-red-50 rounded-xl">
+                          <div className="flex items-center gap-2 text-red-500 text-xs font-bold px-4 py-3 bg-red-50 rounded-xl">
                             <AlertCircle className="w-3.5 h-3.5" /> {errorMsg}
                           </div>
                         )}
@@ -445,12 +443,12 @@ const App: React.FC = () => {
 
                   <div className="flex flex-col h-full space-y-3">
                     <div className="flex justify-between items-center px-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">单词明细 (每行一个)</label>
+                      <label className="text-label text-slate-400 uppercase">单词明细 (每行一个)</label>
                       <div className="flex gap-2">
                         <button 
                           type="button" 
                           onClick={handleCopyInput}
-                          className={`px-3 py-1.5 rounded-full text-[10px] font-black transition-all flex items-center gap-1.5 active:scale-95 ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-indigo-600 hover:text-white'}`}
+                          className={`px-3 py-2 rounded-badge text-xs font-black transition-all flex items-center gap-1.5 active:scale-95 ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-indigo-600 hover:text-white'}`}
                         >
                           {copySuccess ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                           {copySuccess ? '复制成功' : '复制列表'}
@@ -458,7 +456,7 @@ const App: React.FC = () => {
                         <button 
                           type="button" 
                           onClick={handleShuffleInput}
-                          className="px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white text-[10px] font-black transition-all flex items-center gap-1.5 active:scale-95"
+                          className="px-3 py-2 rounded-badge bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white text-xs font-black transition-all flex items-center gap-1.5 active:scale-95"
                         >
                           <Shuffle className="w-3 h-3" />
                           打乱顺序
@@ -471,7 +469,7 @@ const App: React.FC = () => {
                         value={wordsInput} 
                         onChange={e => setWordsInput(e.target.value)} 
                         placeholder="每行输入一个单词..." 
-                        className="w-full h-full min-h-[300px] px-6 py-6 rounded-3xl bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all resize-none shadow-inner leading-relaxed" 
+                        className="w-full h-full min-h-40 px-5 py-5 rounded-input bg-slate-100 border-2 border-transparent focus:border-indigo-500/30 focus:bg-white outline-none font-bold transition-all resize-none shadow-input leading-relaxed" 
                       />
                       {isAnalyzing && (
                         <div className="absolute inset-0 bg-white/95 backdrop-blur-xl rounded-3xl flex flex-col z-20 overflow-hidden border-2 border-indigo-500/10">
@@ -495,8 +493,8 @@ const App: React.FC = () => {
                                   {log.status === 'success' ? <CheckCircle2 className="w-4 h-4" /> : log.status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="w-2 h-2 bg-current rounded-full" />}
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                  <span className="text-[10px] font-black uppercase tracking-widest">{log.name}</span>
-                                  <p className="text-[9px] text-slate-400 truncate">{log.details || '等待中...'}</p>
+                                  <span className="text-xs font-black uppercase tracking-widest">{log.name}</span>
+                                  <p className="text-xs text-slate-400 truncate">{log.details || '等待中...'}</p>
                                 </div>
                               </div>
                             ))}
@@ -507,8 +505,8 @@ const App: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="px-10 py-6 bg-slate-50 border-t">
-                <button type="submit" disabled={isAnalyzing} className="w-full py-5 bg-slate-900 hover:bg-indigo-600 disabled:bg-slate-300 text-white font-black rounded-2xl shadow-xl transition-all uppercase tracking-[0.2em] text-sm">
+              <div className="px-6 py-5 bg-slate-50 border-t">
+                <button type="submit" disabled={isAnalyzing} className="w-full min-h-[44px] py-4 bg-slate-900 hover:bg-indigo-600 disabled:bg-slate-300 text-white font-black rounded-button shadow-button transition-all uppercase tracking-[0.2em] text-button">
                   {editingList ? '更新词单' : '创建词单'}
                 </button>
               </div>
@@ -516,6 +514,7 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+      {isDebugOpen && <DebugConsole onClose={() => setIsDebugOpen(false)} />}
       {currentStudyList && (
         <StudySession 
           list={currentStudyList} 
