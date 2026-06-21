@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
-import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported } from '../services/geminiService';
+import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported, TTSEngine } from '../services/geminiService';
 import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cloud, Star, ChevronDown } from 'lucide-react';
 
 interface StudySessionProps {
@@ -19,12 +19,15 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
   const [hasError, setHasError] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
-  const [selectedEngine, setSelectedEngine] = useState<'Web Speech' | 'AI-TTS'>(getPreferredTTSEngine());
-  const [activeEngine, setActiveEngine] = useState<'Web Speech' | 'AI-TTS'>(selectedEngine);
+  const [selectedEngine, setSelectedEngine] = useState<TTSEngine>(getPreferredTTSEngine());
+  const [activeEngine, setActiveEngine] = useState<TTSEngine>(selectedEngine);
   const [isEngineOpen, setIsEngineOpen] = useState(false);
   const localAvailable = isLocalTTSSupported();
 
   const isComponentMounted = useRef(true);
+  const wordsRef = useRef(list.words);
+  const blockAutoplay = useRef(false);
+  wordsRef.current = list.words;
   const abortControllerRef = useRef<AbortController | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const activeProgressRef = useRef<HTMLDivElement | null>(null);
@@ -62,9 +65,9 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
   const currentMasterIndex = activeIndices[currentIndex];
   const rawWord = list.words[currentMasterIndex];
 
-  const startSequence = useCallback(async () => {
+  const startSequence = useCallback(async (forcedEngine?: TTSEngine) => {
     if (currentMasterIndex === undefined) return;
-    const wordValue = list.words[currentMasterIndex];
+    const wordValue = wordsRef.current[currentMasterIndex];
     if (!wordValue) return;
     
     const wordToSpeak = wordValue.startsWith('*') ? wordValue.substring(1) : wordValue;
@@ -78,7 +81,8 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     
     try {
       const repeatedText = `${wordToSpeak}; ${wordToSpeak}; ${wordToSpeak}.`;
-      const engineUsed = await speakWord(repeatedText, controller.signal, selectedEngine);
+      const engine = forcedEngine || selectedEngine;
+      const engineUsed = await speakWord(repeatedText, controller.signal, engine);
       
       if (isComponentMounted.current) {
         setActiveEngine(engineUsed);
@@ -93,13 +97,14 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
         setIsPlaying(false);
       }
     }
-  }, [list.words, currentMasterIndex, stopPlayback, selectedEngine]);
+  }, [currentMasterIndex, stopPlayback, selectedEngine]);
 
   useEffect(() => {
     // 拖动过程中不自动开始朗读
-    if (activeIndices.length > 0 && !isDragging) {
+    if (activeIndices.length > 0 && !isDragging && !blockAutoplay.current) {
       startSequence();
     }
+    blockAutoplay.current = false;
     return () => stopPlayback();
   }, [currentIndex, activeIndices, startSequence, stopPlayback, isDragging]);
 
@@ -164,10 +169,10 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     };
   }, [isDragging]);
 
-  const selectEngine = (engine: 'Web Speech' | 'AI-TTS') => {
-    if (engine === selectedEngine || (engine === 'Web Speech' && !localAvailable)) return;
+  const selectEngine = (engine: TTSEngine) => {
+    if (engine === selectedEngine || (engine === 'local' && !localAvailable)) return;
     setSelectedEngine(engine);
-    setTimeout(() => startSequence(), 10);
+    setTimeout(() => startSequence(engine), 10);
   };
 
   const toggleErrorMark = () => {
@@ -179,6 +184,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     } else {
       newMasterWords[currentMasterIndex] = '*' + newMasterWords[currentMasterIndex];
     }
+    blockAutoplay.current = true;
     onUpdateList(list.id, newMasterWords);
   };
 
@@ -188,8 +194,10 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
   const isMarked = rawWord?.startsWith('*');
   const displayWord = isMarked ? rawWord.substring(1) : rawWord;
   const engineOptions = [
-    { engine: 'Web Speech' as const, title: '本地引擎', subtitle: 'Web Speech', icon: Zap, available: localAvailable },
-    { engine: 'AI-TTS' as const, title: 'AI 云端', subtitle: 'AI-TTS', icon: Cloud, available: true },
+    { engine: 'edge' as TTSEngine, title: 'Edge TTS', subtitle: '微软云端', icon: Cloud, available: true },
+    { engine: 'minimax' as TTSEngine, title: 'MiniMax', subtitle: '稀宇云端', icon: Zap, available: true },
+    { engine: 'glm' as TTSEngine, title: 'GLM 语音', subtitle: '智谱云端', icon: Cloud, available: true },
+    { engine: 'local' as TTSEngine, title: '本地引擎', subtitle: 'Web Speech', icon: Zap, available: localAvailable },
   ];
   const selectedEngineTitle = engineOptions.find(({ engine }) => engine === selectedEngine)?.title ?? selectedEngine;
   const playerControls = (

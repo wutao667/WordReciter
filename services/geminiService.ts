@@ -6,13 +6,16 @@
 
 const PROXY_OCR_ENDPOINT = '/api/ocr';
 const GLM_TTS_ENDPOINT = '/api/tts-glm';
+const MINIMAX_TTS_ENDPOINT = '/api/tts-minimax';
 const EDGE_TTS_ENDPOINT = '/api/tts-edge';
 const TTS_AVAILABLE_ENDPOINT = '/api/tts-available';
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 let currentAudio: HTMLAudioElement | null = null;
-let ttsAvailability: { edge: boolean; glm: boolean; available: boolean } | null = null;
+let ttsAvailability: { edge: boolean; minimax: boolean; glm: boolean; available: boolean } | null = null;
 let ttsAvailabilityPromise: Promise<typeof ttsAvailability> | null = null;
+
+export type TTSEngine = 'edge' | 'minimax' | 'glm' | 'local';
 
 /**
  * 通用的带类型检查的 Fetch 封装，防止解析非 JSON 数据
@@ -147,13 +150,14 @@ const loadTTSAvailability = async () => {
       .then((data) => {
         ttsAvailability = {
           edge: !!data.edge,
+          minimax: !!data.minimax,
           glm: !!data.glm,
           available: !!data.available
         };
         return ttsAvailability;
       })
       .catch(() => {
-        ttsAvailability = { edge: true, glm: false, available: true };
+        ttsAvailability = { edge: true, minimax: false, glm: false, available: true };
         return ttsAvailability;
       });
   }
@@ -200,27 +204,72 @@ export const speakWithEdgeTTS = async (text: string, signal?: AbortSignal): Prom
   }
 };
 
+export const speakWithMinimaxTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
+  stopAllSpeech();
+  try {
+    const response = await fetch(MINIMAX_TTS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({ text })
+    });
+    if (!response.ok) {
+      const errData = await response.json().catch(() => null);
+      throw new Error(errData?.error || `MiniMax 错误: ${response.status}`);
+    }
+    const data = await response.json();
+    if (!data?.audio) throw new Error('MiniMax 响应中没有音频数据');
+    const audio = new Audio(`data:audio/mpeg;base64,${data.audio}`);
+    if (signal?.aborted) throw new Error('AbortError');
+    currentAudio = audio;
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        audio.pause();
+        audio.src = '';
+        reject(new Error('AbortError'));
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      audio.onended = () => {
+        signal?.removeEventListener('abort', onAbort);
+        if (currentAudio === audio) currentAudio = null;
+        resolve();
+      };
+      audio.onerror = () => {
+        signal?.removeEventListener('abort', onAbort);
+        if (currentAudio === audio) currentAudio = null;
+        reject(new Error('MiniMax 音频播放失败'));
+      };
+      audio.play().catch(() => reject(new Error('播放被拦截或失败')));
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError' || err.message === 'AbortError') throw new Error('AbortError');
+    throw err;
+  }
+};
+
 export const isLocalTTSSupported = (): boolean => {
   if (isWechat) return false;
   return !!(window.speechSynthesis && (window.speechSynthesis.getVoices().length > 0 || /Safari|iPhone|iPad/i.test(navigator.userAgent)));
 };
 
-export const getPreferredTTSEngine = (): 'Web Speech' | 'AI-TTS' => {
-  loadTTSAvailability();
-  return ttsAvailability?.available === false ? 'Web Speech' : 'AI-TTS';
+export const getPreferredTTSEngine = (): TTSEngine => {
+  return 'edge';
 };
 
-export const speakWord = async (text: string, signal?: AbortSignal, forcedEngine?: 'Web Speech' | 'AI-TTS'): Promise<'Web Speech' | 'AI-TTS'> => {
-  const availability = await loadTTSAvailability();
-  const engineToUse = forcedEngine || (availability?.available ? 'AI-TTS' : 'Web Speech');
-  if (engineToUse === 'AI-TTS') {
-    if (availability?.edge) {
-      try { await speakWithEdgeTTS(text, signal); return 'AI-TTS'; } catch (err: any) { if (err.message === 'AbortError') throw err; }
-    }
-    if (availability?.glm) { await speakWithAiTTS(text, signal); return 'AI-TTS'; }
+export const speakWord = async (text: string, signal?: AbortSignal, engine?: TTSEngine): Promise<TTSEngine> => {
+  const targetEngine = engine || 'edge';
+
+  if (targetEngine === 'edge') {
+    await speakWithEdgeTTS(text, signal);
+  } else if (targetEngine === 'minimax') {
+    await speakWithMinimaxTTS(text, signal);
+  } else if (targetEngine === 'glm') {
+    await speakWithAiTTS(text, signal);
+  } else if (targetEngine === 'local') {
+    await speakWordLocal(text, signal);
   }
-  await speakWordLocal(text, signal);
-  return 'Web Speech';
+
+  return targetEngine;
 };
 
 /**

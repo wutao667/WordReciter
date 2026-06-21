@@ -11,10 +11,12 @@ export default async function handler(req: Request) {
   }
 
   const edge = true;
+  const minimax = !!process.env.MINIMAX_API_KEY;
   const glm = !!process.env.GLM_API_KEY;
 
   return new Response(JSON.stringify({
     edge,
+    minimax,
     glm,
     available: true,
     preferred: 'edge'
