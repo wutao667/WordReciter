@@ -61,14 +61,21 @@ export default async function handler(req: Request) {
       body: JSON.stringify({
         model: 'speech-2.6-hd',
         text,
-        voice_id: 'male-qn-qingse',
-        speed: 1.0,
-        vol: 1.0,
-        pitch: 0,
-        emotion: 'neutral',
-        audio_sample_rate: 32000,
-        bitrate: 128000,
-        format: 'mp3'
+        stream: false,
+        output_format: 'hex',
+        language_boost: 'auto',
+        voice_setting: {
+          voice_id: 'male-qn-qingse',
+          speed: 1.0,
+          vol: 1.0,
+          pitch: 0
+        },
+        audio_setting: {
+          sample_rate: 32000,
+          bitrate: 128000,
+          format: 'mp3',
+          channel: 1
+        }
       })
     });
 
