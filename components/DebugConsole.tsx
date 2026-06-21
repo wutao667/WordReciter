@@ -149,15 +149,41 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
     setIsTestingVision(false);
   };
 
-  const testTTS = async (mode: 'local' | 'ai' | 'edge') => {
+  const speakWithMinimaxTTS = async (text: string): Promise<void> => {
+    const response = await fetch('/api/tts-minimax', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new Error(errorData?.error || `MiniMax TTS 错误: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data?.audio || typeof data.audio !== 'string') {
+      throw new Error('MiniMax TTS 响应中没有音频数据');
+    }
+
+    const audio = new Audio(`data:audio/mpeg;base64,${data.audio}`);
+    await new Promise<void>((resolve, reject) => {
+      audio.onended = () => resolve();
+      audio.onerror = () => reject(new Error('MiniMax 音频播放失败'));
+      audio.play().catch(() => reject(new Error('播放被拦截或失败')));
+    });
+  };
+
+  const testTTS = async (mode: 'local' | 'ai' | 'edge' | 'minimax') => {
     setIsTestingTTS(true);
     const testText = "Hello, this is LingoEcho testing the voice quality. 欢迎使用听写助手。";
-    addLog('info', `尝试 [${mode === 'local' ? '本地' : mode === 'ai' ? 'GLM 云端' : 'Edge TTS'}] 语音合成...`);
+    addLog('info', `尝试 [${mode === 'local' ? '本地' : mode === 'ai' ? 'GLM 云端' : mode === 'edge' ? 'Edge TTS' : 'MiniMax TTS'}] 语音合成...`);
     
     try {
       if (mode === 'local') await speakWordLocal(testText);
       else if (mode === 'ai') await speakWithAiTTS(testText);
-      else await speakWithEdgeTTS(testText);
+      else if (mode === 'edge') await speakWithEdgeTTS(testText);
+      else await speakWithMinimaxTTS(testText);
       addLog('success', `${mode.toUpperCase()} 播报成功`);
     } catch (err: any) {
       addLog('error', `${mode.toUpperCase()} 播报失败: ${err.message}`);
@@ -309,7 +335,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
             )}
 
             {activeTab === 'tts' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
                   <div className="flex justify-between items-start"><Volume2 className="w-4 h-4 text-slate-400" /></div>
                   <h4 className="font-black text-xs text-slate-800">Web TTS</h4>
@@ -324,6 +350,11 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                   <div className="flex justify-between items-start"><Cloud className="w-4 h-4 text-sky-500" /></div>
                   <h4 className="font-black text-xs text-slate-800">Edge TTS</h4>
                   <button onClick={() => testTTS('edge')} disabled={isTestingTTS} className="w-full py-3 bg-sky-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-sky-100 transition-all">云端测试</button>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-rose-50 shadow-sm space-y-4">
+                  <div className="flex justify-between items-start"><Cloud className="w-4 h-4 text-rose-500" /></div>
+                  <h4 className="font-black text-xs text-slate-800">MiniMax TTS</h4>
+                  <button onClick={() => testTTS('minimax')} disabled={isTestingTTS} className="w-full py-3 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-rose-100 transition-all">云端测试</button>
                 </div>
               </div>
             )}
