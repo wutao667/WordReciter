@@ -2,7 +2,7 @@ export const config = {
   runtime: 'edge',
 };
 
-const MINIMAX_TTS_ENDPOINT = 'https://api.minimax.io/v1/t2a_v2';
+const MINIMAX_TTS_ENDPOINT = 'https://api.minimaxi.com/v1/t2a_v2';
 
 const hexToBase64 = (hex: string) => {
   const cleanHex = hex.trim();
@@ -62,20 +62,22 @@ export default async function handler(req: Request) {
         model: 'speech-2.6-hd',
         text,
         stream: false,
-        output_format: 'hex',
-        language_boost: 'auto',
         voice_setting: {
           voice_id: 'male-qn-qingse',
           speed: 1.0,
           vol: 1.0,
           pitch: 0
         },
+        pronunciation_dict: {
+          tone: []
+        },
         audio_setting: {
           sample_rate: 32000,
           bitrate: 128000,
           format: 'mp3',
           channel: 1
-        }
+        },
+        subtitle_enable: false
       })
     });
 
@@ -88,6 +90,10 @@ export default async function handler(req: Request) {
     }
 
     const data = await response.json();
+    if (data?.base_resp?.status_code !== 0) {
+      throw new Error(data?.base_resp?.status_msg || 'MiniMax 业务处理失败');
+    }
+
     const audioHex = data?.data?.audio;
     if (!audioHex || typeof audioHex !== 'string') {
       return new Response(JSON.stringify({ error: 'MiniMax 响应中没有音频数据' }), {
