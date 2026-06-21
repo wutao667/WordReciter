@@ -276,7 +276,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
         <div className="md:col-span-8 flex flex-col items-center justify-center min-h-0">
           <div className={`w-full h-full rounded-card bg-white/5 backdrop-blur-3xl border border-white/10 flex flex-col items-center justify-center p-6 md:p-12 relative shadow-card transition-all duration-700 ${isPlaying ? 'scale-[1.01] border-indigo-500/30 shadow-card' : ''}`}>
               
-              <div className="relative text-center w-full flex-1 flex flex-col items-center justify-center min-h-0 overflow-hidden">
+              <div className="relative text-center w-full flex-1 flex flex-col items-center justify-center min-h-[240px] md:min-h-[320px] overflow-hidden">
                 {hasError ? (
                   <div className="flex flex-col items-center space-y-4 md:space-y-6 text-amber-400 p-4">
                     <AlertTriangle className="w-12 h-12 md:w-16 md:h-16 opacity-50" />
