@@ -18,10 +18,10 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
   const [isWordVisible, setIsWordVisible] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isEngineOpen, setIsEngineOpen] = useState(false);
   
   const [selectedEngine, setSelectedEngine] = useState<'Web Speech' | 'AI-TTS'>(getPreferredTTSEngine());
   const [activeEngine, setActiveEngine] = useState<'Web Speech' | 'AI-TTS'>(selectedEngine);
+  const [isEngineOpen, setIsEngineOpen] = useState(false);
   const localAvailable = isLocalTTSSupported();
 
   const isComponentMounted = useRef(true);
@@ -164,10 +164,9 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     };
   }, [isDragging]);
 
-  const toggleEngine = () => {
-    if (!localAvailable && selectedEngine === 'AI-TTS') return;
-    const next = selectedEngine === 'Web Speech' ? 'AI-TTS' : 'Web Speech';
-    setSelectedEngine(next);
+  const selectEngine = (engine: 'Web Speech' | 'AI-TTS') => {
+    if (engine === selectedEngine || (engine === 'Web Speech' && !localAvailable)) return;
+    setSelectedEngine(engine);
     setTimeout(() => startSequence(), 10);
   };
 
@@ -188,6 +187,11 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
   const progress = ((currentIndex + 1) / activeIndices.length) * 100;
   const isMarked = rawWord?.startsWith('*');
   const displayWord = isMarked ? rawWord.substring(1) : rawWord;
+  const engineOptions = [
+    { engine: 'Web Speech' as const, title: '本地引擎', subtitle: 'Web Speech', icon: Zap, available: localAvailable },
+    { engine: 'AI-TTS' as const, title: 'AI 云端', subtitle: 'AI-TTS', icon: Cloud, available: true },
+  ];
+  const selectedEngineTitle = engineOptions.find(({ engine }) => engine === selectedEngine)?.title ?? selectedEngine;
   const playerControls = (
     <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-4 md:p-8 lg:p-12 rounded-card shadow-card flex-1 flex flex-col justify-center min-h-0">
       <div className="flex items-center justify-center space-x-6 md:space-x-10 mb-6 md:mb-16">
@@ -316,31 +320,55 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
 
         <div className="md:col-span-4 flex flex-col shrink-0 space-y-4 md:space-y-8 md:sticky md:top-20 md:self-start">
             <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-4 md:p-6 lg:p-10 rounded-card shadow-card">
-              <div className="flex items-center justify-between md:mb-6 lg:mb-8 px-2">
-                 <div className="hidden md:flex items-center gap-2 lg:gap-3">
+              <button
+                type="button"
+                onClick={() => setIsEngineOpen(prev => !prev)}
+                aria-expanded={isEngineOpen}
+                className={`w-full flex items-center justify-between px-2 text-left transition-all ${isEngineOpen ? 'mb-4 md:mb-6 lg:mb-8' : ''}`}
+              >
+                 <div className="flex items-center gap-2 lg:gap-3">
                    <Zap className="w-4 h-4 lg:w-5 lg:h-5 text-indigo-400" />
                    <span className="text-label font-black text-white uppercase tracking-widest opacity-80">语音引擎</span>
                  </div>
-                 <button
-                   onClick={() => setIsEngineOpen(prev => !prev)}
-                   className="md:hidden flex w-full items-center justify-between gap-2 text-caption font-black text-slate-300 uppercase tracking-widest"
-                 >
-                   <span>{selectedEngine === 'Web Speech' ? '本地引擎' : 'AI 云端'}</span>
-                   <ChevronDown className={`w-4 h-4 transition-transform ${isEngineOpen ? 'rotate-180' : ''}`} />
-                 </button>
-              </div>
-              <button 
-                onClick={toggleEngine}
-                disabled={!localAvailable && selectedEngine === 'AI-TTS'}
-                className={`w-full ${isEngineOpen ? 'flex' : 'hidden'} md:flex items-center gap-3 lg:gap-5 p-4 lg:p-5 mt-4 md:mt-0 rounded-button border-2 transition-all duration-300 active:scale-[0.97] group ${selectedEngine === 'Web Speech' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-sky-500/5 border-sky-500/20 text-sky-400'}`}
-              >
-                <div className={`w-3 h-3 lg:w-4 lg:h-4 rounded-badge transition-all duration-500 shrink-0 ${selectedEngine === 'Web Speech' ? 'bg-emerald-400 shadow-button' : 'bg-sky-400 shadow-button'}`} />
-                <div className="flex-1 text-left min-w-0">
-                  <span className="text-label font-black uppercase tracking-widest block mb-0.5 truncate">切换模式</span>
-                  <span className="text-caption font-bold opacity-60 italic block truncate">{selectedEngine === 'Web Speech' ? '本地引擎' : 'AI 云端'}</span>
-                </div>
-                {selectedEngine === 'Web Speech' ? <Zap className="w-4 h-4 lg:w-5 lg:h-5 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" /> : <Cloud className="w-4 h-4 lg:w-5 lg:h-5 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />}
+                 <div className="flex min-w-0 items-center gap-2 text-slate-400">
+                   <span className="text-caption font-black uppercase tracking-widest truncate">{selectedEngineTitle}</span>
+                   <ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-300 ${isEngineOpen ? 'rotate-180' : ''}`} />
+                 </div>
               </button>
+              {isEngineOpen && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {engineOptions.map(({ engine, title, subtitle, icon: Icon, available }) => {
+                    const isSelected = selectedEngine === engine;
+                    return (
+                      <button
+                        key={engine}
+                        type="button"
+                        onClick={() => selectEngine(engine)}
+                        disabled={!available}
+                        aria-pressed={isSelected}
+                        className={`flex min-w-0 items-center gap-3 p-4 lg:p-5 rounded-button border-2 text-left transition-all duration-300 group ${
+                          !available
+                            ? 'cursor-not-allowed border-slate-700/40 bg-slate-800/10 text-slate-500 opacity-45'
+                            : isSelected
+                              ? 'border-indigo-400/70 bg-indigo-500/10 text-indigo-200 shadow-button active:scale-[0.97]'
+                              : 'border-white/10 bg-transparent text-slate-400 hover:border-white/20 hover:text-slate-200 active:scale-[0.97]'
+                        }`}
+                      >
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-badge border transition-all ${
+                          isSelected && available ? 'border-indigo-300 bg-indigo-500 shadow-button' : 'border-slate-500/50 bg-transparent'
+                        }`}>
+                          <span className={`h-1.5 w-1.5 rounded-badge bg-white transition-opacity ${isSelected && available ? 'opacity-100' : 'opacity-0'}`} />
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-label font-black uppercase tracking-widest block mb-0.5 truncate">{title}</span>
+                          <span className="text-caption font-bold opacity-60 italic block truncate">{available ? subtitle : '不可用'}</span>
+                        </div>
+                        <Icon className={`w-4 h-4 lg:w-5 lg:h-5 shrink-0 transition-opacity ${isSelected && available ? 'opacity-100' : 'opacity-40 group-hover:opacity-80'}`} />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="hidden md:flex flex-1 min-h-0">
