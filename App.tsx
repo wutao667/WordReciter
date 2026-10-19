@@ -5,7 +5,7 @@ import WordListCard from './components/WordListCard';
 import StudySession from './components/StudySession';
 import DebugConsole from "./components/DebugConsole";
 import { extractWordsFromImage } from './services/geminiService';
-import { Plus, Mic, Loader2, Zap, Layout, AlertCircle, Camera, Image as ImageIcon, CheckCircle2, Terminal, Shuffle, X, Languages, Copy, Check, Bug } from "lucide-react";
+import { Plus, Mic, Loader2, Zap, Layout, AlertCircle, Camera, Image as ImageIcon, CheckCircle2, Terminal, Shuffle, X, Languages, Copy, Check, Bug, ListChecks } from "lucide-react";
 
 interface AnalysisStep {
   id: string;
@@ -13,6 +13,22 @@ interface AnalysisStep {
   status: 'pending' | 'loading' | 'success' | 'error';
   details?: string;
 }
+
+// 单个拉丁字母默认为噪声，但 a / i 是真实单词，保留
+const SINGLE_LETTER_KEEPERS = new Set(['a', 'i']);
+
+/**
+ * 判断一整行是否为「非单词」噪声。
+ * 只按整行判断：形如 "a lot of"、"i am" 的短语永远不会被误伤。
+ * 规则：
+ *   1. 不含任何字母或汉字（纯数字 / 纯符号）-> 噪声
+ *   2. 单个拉丁字母（保留 a / i）-> 噪声
+ */
+const isNoiseLine = (line: string): boolean => {
+  if (!/[A-Za-z\u4e00-\u9fff]/.test(line)) return true;
+  if (/^[A-Za-z]$/.test(line)) return !SINGLE_LETTER_KEEPERS.has(line.toLowerCase());
+  return false;
+};
 
 const App: React.FC = () => {
   const [lists, setLists] = useState<WordList[]>([]);
@@ -32,6 +48,7 @@ const App: React.FC = () => {
   const [interimText, setInterimText] = useState('');
   const [pendingLang, setPendingLang] = useState<'en-US' | 'zh-CN' | null>(null); 
   const [copySuccess, setCopySuccess] = useState(false);
+  const [cleanFeedback, setCleanFeedback] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   
   // OCR 语种选择状态
@@ -292,6 +309,38 @@ const App: React.FC = () => {
     });
   };
 
+  const flashCleanFeedback = (text: string) => {
+    setCleanFeedback(text);
+    setTimeout(() => setCleanFeedback(null), 2000);
+  };
+
+  const handleCleanInput = () => {
+    const lines = wordsInput.split('\n').map(w => w.trim()).filter(Boolean);
+    if (lines.length === 0) return;
+
+    const seen = new Set<string>();
+    const kept: string[] = [];
+    let removed = 0;
+
+    for (const line of lines) {
+      const key = line.toLowerCase();
+      // 去重：不区分大小写，保留首次出现
+      if (seen.has(key)) { removed++; continue; }
+      // 过滤整行为噪声的行（短语不受影响）
+      if (isNoiseLine(line)) { removed++; continue; }
+      seen.add(key);
+      kept.push(line);
+    }
+
+    if (kept.length === 0) {
+      flashCleanFeedback('没有可保留的单词');
+      return;
+    }
+
+    setWordsInput(kept.join('\n'));
+    flashCleanFeedback(removed > 0 ? `已清理 ${removed} 项` : '无需清理');
+  };
+
   const handleSaveList = (e: React.FormEvent) => {
     e.preventDefault();
     const words = wordsInput.split('\n').map(w => w.trim()).filter(w => w);
@@ -460,6 +509,14 @@ const App: React.FC = () => {
                         >
                           <Shuffle className="w-3 h-3" />
                           打乱顺序
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={handleCleanInput}
+                          className={`px-3 py-2 rounded-badge text-xs font-black transition-all flex items-center gap-1.5 active:scale-95 ${cleanFeedback ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-indigo-600 hover:text-white'}`}
+                        >
+                          <ListChecks className="w-3 h-3" />
+                          {cleanFeedback ?? '去重清洗'}
                         </button>
                       </div>
                     </div>

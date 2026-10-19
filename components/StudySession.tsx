@@ -195,6 +195,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
   const displayWord = isMarked ? rawWord.substring(1) : rawWord;
   const engineOptions = [
     { engine: 'edge' as TTSEngine, title: 'Edge TTS', subtitle: '微软云端', icon: Cloud, available: true },
+    { engine: 'tencent' as TTSEngine, title: '腾讯云', subtitle: '精品音色', icon: Cloud, available: true },
     { engine: 'minimax' as TTSEngine, title: 'MiniMax', subtitle: '稀宇云端', icon: Zap, available: true },
     { engine: 'glm' as TTSEngine, title: 'GLM 语音', subtitle: '智谱云端', icon: Cloud, available: true },
     { engine: 'local' as TTSEngine, title: '本地引擎', subtitle: 'Web Speech', icon: Zap, available: localAvailable },

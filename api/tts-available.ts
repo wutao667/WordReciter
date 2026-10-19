@@ -12,15 +12,17 @@ export default async function handler(req: any, res: any) {
   }
 
   const edge = await probeEdgeTts(3000);
+  const tencent = !!(process.env.TENCENT_SECRET_ID && process.env.TENCENT_SECRET_KEY);
   const minimax = !!process.env.MINIMAX_API_KEY;
   const glm = !!process.env.GLM_API_KEY;
-  const preferred = edge ? 'edge' : minimax ? 'minimax' : glm ? 'glm' : 'local';
+  const preferred = edge ? 'edge' : tencent ? 'tencent' : minimax ? 'minimax' : glm ? 'glm' : 'local';
 
   return jsonResponse(res, 200, {
     edge,
+    tencent,
     minimax,
     glm,
-    available: edge || minimax || glm,
+    available: edge || tencent || minimax || glm,
     preferred
   });
 }

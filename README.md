@@ -1,6 +1,6 @@
 # LingoEcho - 极简语音背单词助手
 
-LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音、拍照识词创建词单，通过 Gemini OCR 解析图片内容，并用 Microsoft Edge TTS、GLM TTS 或浏览器 Web Speech API 播放发音。v3.1.0 起所有可选 AI API key 都保存在服务端 Vercel Functions，纯朗读场景 0 key 可跑。
+LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音、拍照识词创建词单，通过 Gemini OCR 解析图片内容，并用 Microsoft Edge TTS、腾讯云 TTS、MiniMax、GLM TTS 或浏览器 Web Speech API 播放发音。所有可选 AI API key 都保存在服务端 Vercel Functions，纯朗读场景 0 key 可跑。
 
 ## ✨ 功能特性
 
@@ -8,7 +8,7 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 - **📸 视觉识词**：通过 Gemini OCR 解析教材图片、练习页或词表中的英文内容。
 - **🚩 生词标记与重默**：把不熟的词标记为生词字，自动进入重默列表，集中强化薄弱项。
 - **🔀 打乱顺序**：学习和复习时可打乱单词顺序，减少对固定位置和顺序的依赖。
-- **🔊 多 TTS 引擎**：Edge TTS 免费首选，GLM TTS 可选 fallback，浏览器 Web Speech API 负责本地降级。
+- **🔊 多 TTS 引擎**：Edge TTS 免费首选，腾讯云精品音色提供稳定云端备选，MiniMax、GLM TTS 和浏览器 Web Speech API 可按需使用。
 - **📱 跨设备适配**：同时适配电脑和移动端，支持桌面多列管理、手机拍图识词和触摸式复习。
 - **🧩 可部署副本**：Vite + React + Vercel Edge Functions，适合快速 fork 后部署自己的实例。
 
@@ -18,7 +18,7 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 - **Styling**: Tailwind CSS
 - **Backend**: Vercel Functions（Edge TTS 使用 Node.js runtime，其余端点按需使用 Node.js / Edge runtime）
 - **OCR**: Gemini OCR (optional, for image recognition)
-- **TTS**: Microsoft Edge TTS, GLM TTS, Web Speech API
+- **TTS**: Microsoft Edge TTS, Tencent Cloud TTS, MiniMax, GLM TTS, Web Speech API
 - **Deployment**: Vercel
 
 ## 📦 API 端点
@@ -27,6 +27,8 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 | --- | --- | --- |
 | `/api/ocr` | `POST` | 使用 Gemini OCR 解析图片内容，需要 `GEM_API_KEY` |
 | `/api/tts-edge` | `POST` | Microsoft Edge TTS，免费、无需 key，v3.0.0 默认首选 |
+| `/api/tts-tencent` | `POST` | 腾讯云语音合成精品音色，需要腾讯云凭据 |
+| `/api/tts-minimax` | `POST` | MiniMax TTS，可选备用，需要 `MINIMAX_API_KEY` |
 | `/api/tts-glm` | `POST` | 智谱 GLM TTS，可选 fallback，需要 `GLM_API_KEY` |
 | `/api/tts-available` | `GET` / `POST` | 探测当前可用的 TTS 后端 |
 
@@ -35,6 +37,11 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 | Variable | 必需 | 用途 |
 | --- | --- | --- |
 | `GEM_API_KEY` | **可选**（仅 OCR 用） | Gemini OCR，用于图片识词；纯朗读不需要 |
+| `TENCENT_SECRET_ID` | **可选**（腾讯云 TTS 必需） | 腾讯云 API SecretId，仅服务端使用 |
+| `TENCENT_SECRET_KEY` | **可选**（腾讯云 TTS 必需） | 腾讯云 API SecretKey，仅服务端使用 |
+| `TENCENT_TTS_VOICE_ZH` | 可选 | 中文精品音色 ID，默认 `101001`（智瑜） |
+| `TENCENT_TTS_VOICE_EN` | 可选 | 英文精品音色 ID，默认 `101050`（WeJack） |
+| `MINIMAX_API_KEY` | **可选**（备用 TTS 渠道） | MiniMax TTS |
 | `GLM_API_KEY` | **可选**（备用 TTS 渠道） | GLM TTS fallback |
 
 变量配置在服务端环境中；本项目不需要 `VITE_` 前缀，纯 TTS 场景 0 key 可跑。
@@ -42,10 +49,12 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 ## 🔊 TTS 优先级
 
 1. **Microsoft Edge TTS**：默认首选，免费、无需 key。
-2. **GLM TTS**：配置 `GLM_API_KEY` 后作为云端 fallback。
-3. **Web Speech API**：浏览器本地降级方案。
+2. **腾讯云 TTS**：配置 SecretId 和 SecretKey 后使用精品音色；中文默认 `101001`，英文默认 `101050`。
+3. **MiniMax TTS**：配置 `MINIMAX_API_KEY` 后可用。
+4. **GLM TTS**：配置 `GLM_API_KEY` 后可用。
+5. **Web Speech API**：浏览器本地降级方案。
 
-纯朗读默认走 Edge TTS；失败后按 GLM TTS、Web Speech API 顺序降级。
+可用性接口按以上顺序给出推荐引擎；学习页也可手动切换。当前播放失败后会显示重试状态，不会自动切换引擎。
 
 ## 📱 跨设备适配
 
@@ -65,6 +74,11 @@ npm install
 
 ```bash
 GEM_API_KEY=your_gemini_key
+TENCENT_SECRET_ID=your_tencent_secret_id
+TENCENT_SECRET_KEY=your_tencent_secret_key
+# TENCENT_TTS_VOICE_ZH=101001
+# TENCENT_TTS_VOICE_EN=101050
+MINIMAX_API_KEY=your_minimax_key
 GLM_API_KEY=your_glm_key
 ```
 
@@ -88,6 +102,11 @@ npm run dev
 | Environment Variable | 用途 |
 | --- | --- |
 | `GEM_API_KEY` | 可选，仅 OCR 图片识词使用 |
+| `TENCENT_SECRET_ID` | 可选，腾讯云 TTS 启用时必需 |
+| `TENCENT_SECRET_KEY` | 可选，腾讯云 TTS 启用时必需 |
+| `TENCENT_TTS_VOICE_ZH` | 可选，覆盖中文精品音色，默认 `101001` |
+| `TENCENT_TTS_VOICE_EN` | 可选，覆盖英文精品音色，默认 `101050` |
+| `MINIMAX_API_KEY` | 可选，仅 MiniMax TTS 使用 |
 | `GLM_API_KEY` | 可选，仅备用 TTS 使用 |
 
 `vercel.json` 中为 API 配置了 60 秒超时：
@@ -104,6 +123,7 @@ Smoke test:
 ```bash
 curl https://<your-domain>/api/tts-available
 curl -i -X POST https://<your-domain>/api/tts-edge -H 'Content-Type: application/json' --data '{"text":"Hello LingoEcho"}' --output /tmp/test-edge.mp3
+curl -i -X POST https://<your-domain>/api/tts-tencent -H 'Content-Type: application/json' --data '{"text":"Hello LingoEcho","speed":0.6}' --output /tmp/test-tencent.mp3
 ```
 
 ## 📜 版本历史
@@ -135,4 +155,4 @@ curl -i -X POST https://<your-domain>/api/tts-edge -H 'Content-Type: application
 ## 🛡️ License / 致谢
 
 本项目用于学习和个人部署场景，License 信息按 fork 或部署需求补充。
-Thanks to Gemini OCR、Microsoft Edge TTS、GLM TTS、Vercel 和开源前端生态。
+Thanks to Gemini OCR、Microsoft Edge TTS、腾讯云 TTS、MiniMax、GLM TTS、Vercel 和开源前端生态。

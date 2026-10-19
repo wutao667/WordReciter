@@ -8,14 +8,21 @@ const PROXY_OCR_ENDPOINT = '/api/ocr';
 const GLM_TTS_ENDPOINT = '/api/tts-glm';
 const MINIMAX_TTS_ENDPOINT = '/api/tts-minimax';
 const EDGE_TTS_ENDPOINT = '/api/tts-edge';
+const TENCENT_TTS_ENDPOINT = '/api/tts-tencent';
 const TTS_AVAILABLE_ENDPOINT = '/api/tts-available';
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 let currentAudio: HTMLAudioElement | null = null;
-let ttsAvailability: { edge: boolean; minimax: boolean; glm: boolean; available: boolean } | null = null;
+let ttsAvailability: { edge: boolean; tencent: boolean; minimax: boolean; glm: boolean; available: boolean } | null = null;
 let ttsAvailabilityPromise: Promise<typeof ttsAvailability> | null = null;
 
-export type TTSEngine = 'edge' | 'minimax' | 'glm' | 'local';
+// 会话内记录已失败的引擎，避免每个单词都重复卡一次超时。
+const unhealthyEngines = new Set<TTSEngine>();
+
+/** 云端引擎的回退顺序，本地（Web Speech）永远是最后兑底。 */
+const FALLBACK_CHAIN: TTSEngine[] = ['edge', 'tencent', 'minimax', 'glm'];
+
+export type TTSEngine = 'edge' | 'tencent' | 'minimax' | 'glm' | 'local';
 
 /**
  * 通用的带类型检查的 Fetch 封装，防止解析非 JSON 数据
@@ -150,6 +157,7 @@ const loadTTSAvailability = async () => {
       .then((data) => {
         ttsAvailability = {
           edge: !!data.edge,
+          tencent: !!data.tencent,
           minimax: !!data.minimax,
           glm: !!data.glm,
           available: !!data.available
@@ -157,7 +165,7 @@ const loadTTSAvailability = async () => {
         return ttsAvailability;
       })
       .catch(() => {
-        ttsAvailability = { edge: false, minimax: false, glm: false, available: false };
+        ttsAvailability = { edge: false, tencent: false, minimax: false, glm: false, available: false };
         return ttsAvailability;
       });
   }
@@ -204,6 +212,28 @@ export const speakWithEdgeTTS = async (text: string, signal?: AbortSignal): Prom
     await playAudioBlob(blob, signal);
   } catch (err: any) {
     if (err.name === 'AbortError' || err.message === 'AbortError') throw new Error("AbortError");
+    throw err;
+  }
+};
+
+export const speakWithTencentTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
+  stopAllSpeech();
+  try {
+    const response = await fetch(TENCENT_TTS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({ text, speed: 0.6 })
+    });
+    if (!response.ok) {
+      const errData = await response.json().catch(() => null);
+      throw new Error(errData?.error || `腾讯云 TTS 错误: ${response.status}`);
+    }
+    const blob = await response.blob();
+    if (signal?.aborted) throw new Error('AbortError');
+    await playAudioBlob(blob, signal);
+  } catch (err: any) {
+    if (err.name === 'AbortError' || err.message === 'AbortError') throw new Error('AbortError');
     throw err;
   }
 };
@@ -258,26 +288,69 @@ export const isLocalTTSSupported = (): boolean => {
 
 export const getPreferredTTSEngine = (): TTSEngine => {
   if (!ttsAvailability || ttsAvailability.edge) return 'edge';
+  if (ttsAvailability.tencent) return 'tencent';
   if (ttsAvailability.minimax) return 'minimax';
   if (ttsAvailability.glm) return 'glm';
   return 'local';
 };
 
-export const speakWord = async (text: string, signal?: AbortSignal, engine?: TTSEngine): Promise<TTSEngine> => {
-  const targetEngine = engine || 'edge';
+const speakWithEngine = async (text: string, signal: AbortSignal | undefined, engine: TTSEngine): Promise<void> => {
+  if (engine === 'edge') return speakWithEdgeTTS(text, signal);
+  if (engine === 'tencent') return speakWithTencentTTS(text, signal);
+  if (engine === 'minimax') return speakWithMinimaxTTS(text, signal);
+  if (engine === 'glm') return speakWithAiTTS(text, signal);
+  return speakWordLocal(text, signal);
+};
 
-  if (targetEngine === 'edge') {
-    await speakWithEdgeTTS(text, signal);
-  } else if (targetEngine === 'minimax') {
-    await speakWithMinimaxTTS(text, signal);
-  } else if (targetEngine === 'glm') {
-    await speakWithAiTTS(text, signal);
-  } else if (targetEngine === 'local') {
-    await speakWordLocal(text, signal);
+const isAbortError = (err: any) => err?.name === 'AbortError' || err?.message === 'AbortError';
+
+/**
+ * 朗读一个单词，带自动回退。
+ *
+ * 先从指定引擎开始尝试；若失败（且非用户主动中断），按
+ * edge -> tencent -> minimax -> glm 的顺序依次回退，
+ * 最后兑底到浏览器本地 Web Speech。
+ *
+ * 失败过的引擎会在会话内被跳过，避免每个单词都重复卡超时。
+ * 返回实际成功使用的引擎。
+ */
+export const speakWord = async (text: string, signal?: AbortSignal, engine?: TTSEngine): Promise<TTSEngine> => {
+  const requested = engine || 'edge';
+  const localUsable = isLocalTTSSupported();
+
+  // 组成尝试顺序：请求的引擎在前，其余云端按链回退，最后本地。
+  const order: TTSEngine[] = [requested];
+  for (const candidate of FALLBACK_CHAIN) {
+    if (!order.includes(candidate)) order.push(candidate);
+  }
+  if (localUsable && !order.includes('local')) order.push('local');
+
+  let lastError: any = null;
+
+  for (const candidate of order) {
+    // 已标记不健康的跳过（但若就是用户当前选的引擎，仍给一次机会，
+    // 避免用户手动切换到它时完全不响应）。
+    if (unhealthyEngines.has(candidate) && candidate !== requested) continue;
+    if (candidate === 'local' && !localUsable) continue;
+
+    try {
+      await speakWithEngine(text, signal, candidate);
+      unhealthyEngines.delete(candidate);
+      return candidate;
+    } catch (err: any) {
+      // 用户主动中断：直接抛出，绝不换引擎重放。
+      if (isAbortError(err)) throw err;
+      lastError = err;
+      unhealthyEngines.add(candidate);
+      console.warn(`TTS 引擎 ${candidate} 失败，尝试回退:`, err?.message || err);
+    }
   }
 
-  return targetEngine;
+  throw lastError || new Error('所有 TTS 引擎均不可用');
 };
+
+/** 供设置/调试使用：重置引擎健康状态。 */
+export const resetTTSHealth = () => { unhealthyEngines.clear(); };
 
 /**
  * 图像 OCR 解析
