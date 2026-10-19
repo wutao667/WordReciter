@@ -157,12 +157,16 @@ const loadTTSAvailability = async () => {
         return ttsAvailability;
       })
       .catch(() => {
-        ttsAvailability = { edge: true, minimax: false, glm: false, available: true };
+        ttsAvailability = { edge: false, minimax: false, glm: false, available: false };
         return ttsAvailability;
       });
   }
   return ttsAvailabilityPromise;
 };
+
+// Warm the availability cache early so a later study session can avoid a
+// backend that is currently unreachable without delaying its first playback.
+void loadTTSAvailability();
 
 export const speakWithAiTTS = async (text: string, signal?: AbortSignal): Promise<void> => {
   stopAllSpeech(); 
@@ -253,7 +257,10 @@ export const isLocalTTSSupported = (): boolean => {
 };
 
 export const getPreferredTTSEngine = (): TTSEngine => {
-  return 'edge';
+  if (!ttsAvailability || ttsAvailability.edge) return 'edge';
+  if (ttsAvailability.minimax) return 'minimax';
+  if (ttsAvailability.glm) return 'glm';
+  return 'local';
 };
 
 export const speakWord = async (text: string, signal?: AbortSignal, engine?: TTSEngine): Promise<TTSEngine> => {

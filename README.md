@@ -1,6 +1,6 @@
 # LingoEcho - 极简语音背单词助手
 
-LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音、拍照识词创建词单，通过 Gemini OCR 解析图片内容，并用 Microsoft Edge TTS、GLM TTS 或浏览器 Web Speech API 播放发音。v3.1.0 起所有可选 AI API key 都保存在 Vercel Edge Functions，纯朗读场景 0 key 可跑。
+LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音、拍照识词创建词单，通过 Gemini OCR 解析图片内容，并用 Microsoft Edge TTS、GLM TTS 或浏览器 Web Speech API 播放发音。v3.1.0 起所有可选 AI API key 都保存在服务端 Vercel Functions，纯朗读场景 0 key 可跑。
 
 ## ✨ 功能特性
 
@@ -16,7 +16,7 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 
 - **Frontend**: Vite, React 19, TypeScript
 - **Styling**: Tailwind CSS
-- **Backend**: Vercel Edge Functions
+- **Backend**: Vercel Functions（Edge TTS 使用 Node.js runtime，其余端点按需使用 Node.js / Edge runtime）
 - **OCR**: Gemini OCR (optional, for image recognition)
 - **TTS**: Microsoft Edge TTS, GLM TTS, Web Speech API
 - **Deployment**: Vercel
@@ -76,7 +76,7 @@ npm run dev
 
 ## ☁️ Vercel 部署
 
-两种方式：GitHub 集成适合自动部署和 PR Preview；Vercel CLI 适合本地手动部署。生产实例：<https://tx.wutao6.cfd/>
+两种方式：GitHub 集成适合自动部署和 PR Preview；Vercel CLI 适合本地手动部署。生产实例：<https://tx.huaguo.site/>
 
 | 配置项 | 推荐值 |
 | --- | --- |
@@ -114,6 +114,7 @@ curl -i -X POST https://<your-domain>/api/tts-edge -H 'Content-Type: application
 | `v2.0.0` | 安全修复。所有 key 移到 Vercel Edge Functions，新增 `/api/ocr`、`/api/tts-glm`、`/api/tts-azure` 3 个后端端点。 |
 | `v3.0.0` | 用免费 Microsoft Edge TTS 替换 Azure TTS 作为默认云端语音方案；新增 `/api/tts-edge` 和 `/api/tts-available`；`vercel.json` 为 API 函数配置 `maxDuration: 60`。 |
 | `v3.1.0` | 彻底移除 Azure TTS（删除 `api/tts-azure.ts`），简化环境变量（全部可选），强化“纯朗读 0 key”卖点。 |
+| `v3.6.0` | 修复 Microsoft Edge TTS 升级 Sec-MS-GEC v2 后的 403/504 故障；内置 v2 CS64 签名和最小 WebSocket 客户端，并将 TTS 可用性改为实时探测。 |
 
 ## 📸 Screenshots
 

@@ -1,4 +1,4 @@
-import { Communicate } from 'edge-tts-universal';
+import { synthesizeMp3 } from '../server/edgeTts.js';
 
 const MAX_TEXT_LENGTH = 5000;
 const SYNTHESIS_TIMEOUT_MS = 55000;
@@ -35,24 +35,6 @@ const normalizeRate = (speed: unknown) => {
   return `${percent >= 0 ? '+' : ''}${percent}%`;
 };
 
-const synthesizeMp3 = async (text: string, voice: string, rate: string) => {
-  const communicate = new Communicate(text, {
-    voice,
-    rate,
-    volume: '+0%',
-    pitch: '+0Hz',
-    connectionTimeout: 8000
-  });
-
-  const chunks: Buffer[] = [];
-  for await (const chunk of communicate.stream()) {
-    if (chunk.type === 'audio' && chunk.data) chunks.push(chunk.data);
-  }
-
-  if (chunks.length === 0) throw new Error('No audio was received.');
-  return Buffer.concat(chunks);
-};
-
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return jsonResponse(res, 405, { error: 'Method Not Allowed' });
@@ -72,12 +54,7 @@ export default async function handler(req: any, res: any) {
 
     const voiceName = selectVoice(text, typeof voice === 'string' ? voice : undefined);
     const rate = normalizeRate(speed);
-    const audio = await Promise.race([
-      synthesizeMp3(text, voiceName, rate),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Edge TTS synthesis timeout')), SYNTHESIS_TIMEOUT_MS);
-      })
-    ]);
+    const audio = await synthesizeMp3(text, voiceName, rate, SYNTHESIS_TIMEOUT_MS);
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'audio/mpeg');
