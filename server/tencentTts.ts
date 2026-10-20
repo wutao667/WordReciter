@@ -173,7 +173,9 @@ const synthesizeChunk = async (
     VoiceType: voice,
     PrimaryLanguage: primaryLanguage,
     Codec: 'mp3',
-    SampleRate: 24000,
+    // 精品音色（如 101001 / 101050）仅支持 8k/16k，传 24k 会被拒绝。
+    // 大模型音色虽支持 24k，但为兼容默认的精品音色，统一使用 16000。
+    SampleRate: 16000,
     Speed: speed,
     Volume: 0
   });
