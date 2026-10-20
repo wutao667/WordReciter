@@ -19,6 +19,9 @@ let ttsAvailabilityPromise: Promise<typeof ttsAvailability> | null = null;
 // 会话内记录已失败的引擎，避免每个单词都重复卡一次超时。
 const unhealthyEngines = new Set<TTSEngine>();
 
+// 会话内记录成功过的引擎，供 UI 用绿色图标展示。
+const healthyEngines = new Set<TTSEngine>();
+
 /** 云端引擎的回退顺序，本地（Web Speech）永远是最后兑底。 */
 const FALLBACK_CHAIN: TTSEngine[] = ['edge', 'tencent', 'minimax', 'glm'];
 
@@ -223,7 +226,8 @@ export const speakWithTencentTTS = async (text: string, signal?: AbortSignal): P
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal,
-      body: JSON.stringify({ text, speed: 0.6 })
+      // 腾讯云语速单独使用 1.0x，与其它引擎的 0.6 慢速朗读有意区分。
+      body: JSON.stringify({ text, speed: 1.0 })
     });
     if (!response.ok) {
       const errData = await response.json().catch(() => null);
@@ -336,12 +340,14 @@ export const speakWord = async (text: string, signal?: AbortSignal, engine?: TTS
     try {
       await speakWithEngine(text, signal, candidate);
       unhealthyEngines.delete(candidate);
+      healthyEngines.add(candidate);
       return candidate;
     } catch (err: any) {
       // 用户主动中断：直接抛出，绝不换引擎重放。
       if (isAbortError(err)) throw err;
       lastError = err;
       unhealthyEngines.add(candidate);
+      healthyEngines.delete(candidate);
       console.warn(`TTS 引擎 ${candidate} 失败，尝试回退:`, err?.message || err);
     }
   }
@@ -351,6 +357,28 @@ export const speakWord = async (text: string, signal?: AbortSignal, engine?: TTS
 
 /** 供设置/调试使用：重置引擎健康状态。 */
 export const resetTTSHealth = () => { unhealthyEngines.clear(); };
+
+/** 引擎健康状态，供 UI 显示图标颜色。 */
+export type TTSEngineHealth = 'ok' | 'failed' | 'unknown';
+
+/**
+ * 查询每个引擎的会话内健康状态：
+ * - 'failed'  : 本会话内尝试过且失败
+ * - 'ok'      : 本会话内尝试过且成功
+ * - 'unknown' : 尚未尝试（默认，UI 显示灰色）
+ */
+export const getTTSHealthSnapshot = (): Record<TTSEngine, TTSEngineHealth> => {
+  const snapshot: Record<TTSEngine, TTSEngineHealth> = {
+    edge: 'unknown',
+    tencent: 'unknown',
+    minimax: 'unknown',
+    glm: 'unknown',
+    local: 'unknown'
+  };
+  for (const engine of healthyEngines) snapshot[engine] = 'ok';
+  for (const engine of unhealthyEngines) snapshot[engine] = 'failed';
+  return snapshot;
+};
 
 /**
  * 图像 OCR 解析

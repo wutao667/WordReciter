@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WordList } from '../types';
-import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported, TTSEngine } from '../services/geminiService';
+import { speakWord, stopAllSpeech, getPreferredTTSEngine, isLocalTTSSupported, TTSEngine, getTTSHealthSnapshot, TTSEngineHealth } from '../services/geminiService';
 import { RotateCcw, SkipBack, SkipForward, Eye, EyeOff, X, Headphones, AlertTriangle, Zap, Cloud, Star, ChevronDown } from 'lucide-react';
 
 interface StudySessionProps {
@@ -22,6 +22,7 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
   const [selectedEngine, setSelectedEngine] = useState<TTSEngine>(getPreferredTTSEngine());
   const [activeEngine, setActiveEngine] = useState<TTSEngine>(selectedEngine);
   const [isEngineOpen, setIsEngineOpen] = useState(false);
+  const [engineHealth, setEngineHealth] = useState<Record<TTSEngine, TTSEngineHealth>>(() => getTTSHealthSnapshot());
   const localAvailable = isLocalTTSSupported();
 
   const isComponentMounted = useRef(true);
@@ -86,11 +87,16 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
       
       if (isComponentMounted.current) {
         setActiveEngine(engineUsed);
+        // 朗读结束后同步引擎健康状态，供图标着色
+        setEngineHealth(getTTSHealthSnapshot());
       }
     } catch (err: any) {
       if (err.message !== 'AbortError' && err.name !== 'AbortError') {
         console.error("Playback failed:", err);
-        if (isComponentMounted.current) setHasError(true);
+        if (isComponentMounted.current) {
+          setHasError(true);
+          setEngineHealth(getTTSHealthSnapshot());
+        }
       }
     } finally {
       if (isComponentMounted.current && abortControllerRef.current === controller) {
@@ -201,6 +207,9 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
     { engine: 'local' as TTSEngine, title: '本地引擎', subtitle: 'Web Speech', icon: Zap, available: localAvailable },
   ];
   const selectedEngineTitle = engineOptions.find(({ engine }) => engine === selectedEngine)?.title ?? selectedEngine;
+  const selectedEngineHealth = engineHealth[selectedEngine];
+  // 回退发生后，提示当前实际使用的引擎
+  const showFallbackHint = activeEngine !== selectedEngine;
   const playerControls = (
     <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-4 md:p-8 lg:p-12 rounded-card shadow-card flex-1 flex flex-col justify-center min-h-0">
       <div className="flex items-center justify-center space-x-6 md:space-x-10 mb-6 md:mb-16">
@@ -340,10 +349,28 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
                    <span className="text-label font-black text-white uppercase tracking-widest opacity-80">语音引擎</span>
                  </div>
                  <div className="flex min-w-0 items-center gap-2 text-slate-400">
+                   <span
+                     aria-hidden
+                     className={`h-2 w-2 shrink-0 rounded-badge ${
+                       selectedEngineHealth === 'failed'
+                         ? 'bg-rose-500'
+                         : selectedEngineHealth === 'ok'
+                           ? 'bg-emerald-400'
+                           : 'bg-slate-600'
+                     }`}
+                   />
                    <span className="text-caption font-black uppercase tracking-widest truncate">{selectedEngineTitle}</span>
                    <ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-300 ${isEngineOpen ? 'rotate-180' : ''}`} />
                  </div>
               </button>
+              {showFallbackHint && (
+                <div className="mb-3 md:mb-4 flex items-center gap-2 rounded-button border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-amber-300">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-caption font-bold leading-tight">
+                    已回退到 {engineOptions.find(({ engine }) => engine === activeEngine)?.title ?? activeEngine}
+                  </span>
+                </div>
+              )}
               {isEngineOpen && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {engineOptions.map(({ engine, title, subtitle, icon: Icon, available }) => {
@@ -372,7 +399,19 @@ const StudySession: React.FC<StudySessionProps> = ({ list, mode, onFinish, onUpd
                           <span className="text-label font-black uppercase tracking-widest block mb-0.5 truncate">{title}</span>
                           <span className="text-caption font-bold opacity-60 italic block truncate">{available ? subtitle : '不可用'}</span>
                         </div>
-                        <Icon className={`w-4 h-4 lg:w-5 lg:h-5 shrink-0 transition-opacity ${isSelected && available ? 'opacity-100' : 'opacity-40 group-hover:opacity-80'}`} />
+                        <Icon
+                          className={`w-4 h-4 lg:w-5 lg:h-5 shrink-0 transition-all ${
+                            !available
+                              ? 'opacity-40'
+                              : engineHealth[engine] === 'failed'
+                                ? 'text-rose-500 opacity-100'
+                                : engineHealth[engine] === 'ok'
+                                  ? 'text-emerald-400 opacity-100'
+                                  : isSelected
+                                    ? 'opacity-100'
+                                    : 'opacity-40 group-hover:opacity-80'
+                          }`}
+                        />
                       </button>
                     );
                   })}

@@ -177,7 +177,7 @@ const synthesizeChunk = async (
     // 大模型音色虽支持 24k，但为兼容默认的精品音色，统一使用 16000。
     SampleRate: 16000,
     Speed: speed,
-    Volume: 0
+    Volume: 5
   });
   const timestamp = Math.floor(Date.now() / 1000);
   const { authorization } = createTencentAuthorization({ secretId, secretKey, timestamp, payload });
