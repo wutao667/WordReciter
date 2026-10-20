@@ -226,8 +226,8 @@ export const speakWithTencentTTS = async (text: string, signal?: AbortSignal): P
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal,
-      // 腾讯云语速单独使用 1.0x，与其它引擎的 0.6 慢速朗读有意区分。
-      body: JSON.stringify({ text, speed: 1.0 })
+      // 腾讯云语速 0.8x，比 1.0x 更从容，仍快于其它引擎的 0.6 慢速朗读。
+      body: JSON.stringify({ text, speed: 0.8 })
     });
     if (!response.ok) {
       const errData = await response.json().catch(() => null);

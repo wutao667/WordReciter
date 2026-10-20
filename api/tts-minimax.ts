@@ -64,7 +64,7 @@ export default async function handler(req: Request) {
         stream: false,
         voice_setting: {
           voice_id: 'male-qn-qingse',
-          speed: 1.0,
+          speed: 0.6,
           vol: 1.0,
           pitch: 0
         },
