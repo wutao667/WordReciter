@@ -69,7 +69,7 @@ const App: React.FC = () => {
     { id: '1', name: "图像读取与预处理", status: 'pending', details: "准备处理原始数据..." },
     { id: '2', name: "图像动态压缩优化", status: 'pending', details: "降低带宽压力中..." },
     { id: '3', name: "API 代理握手", status: 'pending', details: "连接 Vercel Edge Server..." },
-    { id: '4', name: "Gemini 3.0 Vision 建模", status: 'pending', details: "AI 视觉引擎启动中..." },
+    { id: '4', name: "DeepSeek V4.1 视觉建模", status: 'pending', details: "AI 视觉引擎启动中..." },
     { id: '5', name: "OCR 文本流解析", status: 'pending', details: "检测单词边界与语种..." },
     { id: '6', name: "语义校对与去重", status: 'pending', details: "过滤非文本噪声数据..." }
   ];

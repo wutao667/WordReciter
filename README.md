@@ -1,11 +1,11 @@
 # LingoEcho - 极简语音背单词助手
 
-LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音、拍照识词创建词单，通过 Gemini OCR 解析图片内容，并用 Microsoft Edge TTS、腾讯云 TTS、MiniMax、GLM TTS 或浏览器 Web Speech API 播放发音。所有可选 AI API key 都保存在服务端 Vercel Functions，纯朗读场景 0 key 可跑。
+LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音、拍照识词创建词单，通过 opencode-go 的 `deepseek-v4.1-flash` 模型解析图片内容，并用 Microsoft Edge TTS、腾讯云 TTS、MiniMax、GLM TTS 或浏览器 Web Speech API 播放发音。所有可选 AI API key 都保存在服务端 Vercel Functions，纯朗读场景 0 key 可跑。
 
 ## ✨ 功能特性
 
 - **📝 多方式创建词单**：支持文字输入、语音输入和拍照自动识别，按场景选择最快的录入方式。
-- **📸 视觉识词**：通过 Gemini OCR 解析教材图片、练习页或词表中的英文内容。
+- **📸 视觉识词**：通过 opencode-go / `deepseek-v4.1-flash` 解析教材图片、练习页或词表中的中英文内容。
 - **🚩 生词标记与重默**：把不熟的词标记为生词字，自动进入重默列表，集中强化薄弱项。
 - **🔀 打乱顺序**：学习和复习时可打乱单词顺序，减少对固定位置和顺序的依赖。
 - **🔊 多 TTS 引擎**：Edge TTS 免费首选，腾讯云精品音色提供稳定云端备选，MiniMax、GLM TTS 和浏览器 Web Speech API 可按需使用。
@@ -17,7 +17,7 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 - **Frontend**: Vite, React 19, TypeScript
 - **Styling**: Tailwind CSS
 - **Backend**: Vercel Functions（Edge TTS 使用 Node.js runtime，其余端点按需使用 Node.js / Edge runtime）
-- **OCR**: Gemini OCR (optional, for image recognition)
+- **OCR**: opencode-go / `deepseek-v4.1-flash`（可选，用于图片识词）
 - **TTS**: Microsoft Edge TTS, Tencent Cloud TTS, MiniMax, GLM TTS, Web Speech API
 - **Deployment**: Vercel
 
@@ -25,7 +25,7 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 
 | Endpoint | Method | 用途 |
 | --- | --- | --- |
-| `/api/ocr` | `POST` | 使用 Gemini OCR 解析图片内容，需要 `GEM_API_KEY` |
+| `/api/ocr` | `POST` | 通过 opencode-go / `deepseek-v4.1-flash` 解析图片，需要 `OPENCODE_API_KEY`（兼容旧名 `GEM_API_KEY`） |
 | `/api/tts-edge` | `POST` | Microsoft Edge TTS，免费、无需 key，v3.0.0 默认首选 |
 | `/api/tts-tencent` | `POST` | 腾讯云语音合成精品音色，需要腾讯云凭据 |
 | `/api/tts-minimax` | `POST` | MiniMax TTS，可选备用，需要 `MINIMAX_API_KEY` |
@@ -36,7 +36,12 @@ LingoEcho 是一个面向英语学习场景的 Web App：支持文字、语音�
 
 | Variable | 必需 | 用途 |
 | --- | --- | --- |
-| `GEM_API_KEY` | **可选**（仅 OCR 用） | Gemini OCR，用于图片识词；纯朗读不需要 |
+| `OPENCODE_API_KEY` | **可选**（仅 OCR 用） | opencode-go API key，用于图片识词；纯朗读不需要。未配置时兼容读取旧名 `GEM_API_KEY` |
+| `OPENCODE_BASE_URL` | 可选 | OCR 上游地址，默认 `https://opencode.ai/zen/go/v1/chat/completions` |
+| `OPENCODE_MODEL` | 可选 | OCR 模型，默认 `deepseek-v4.1-flash` |
+| `OPENCODE_MAX_TOKENS` | 可选 | 最大输出 token 数，默认 `2000` |
+| `OPENCODE_CONTEXT_WINDOW` | 可选 | 上游上下文窗口，默认 `1048576` |
+| `OPENCODE_TIMEOUT_MS` | 可选 | 上游超时毫秒数，默认 `55000` |
 | `TENCENT_SECRET_ID` | **可选**（腾讯云 TTS 必需） | 腾讯云 API SecretId，仅服务端使用 |
 | `TENCENT_SECRET_KEY` | **可选**（腾讯云 TTS 必需） | 腾讯云 API SecretKey，仅服务端使用 |
 | `TENCENT_TTS_VOICE_ZH` | 可选 | 中文精品音色 ID，默认 `101001`（智瑜） |
@@ -73,7 +78,8 @@ npm install
 创建 `.env.local`：
 
 ```bash
-GEM_API_KEY=your_gemini_key
+OPENCODE_API_KEY=your_opencode_key
+# GEM_API_KEY=your_legacy_key # 仅为旧部署兼容，优先使用 OPENCODE_API_KEY
 TENCENT_SECRET_ID=your_tencent_secret_id
 TENCENT_SECRET_KEY=your_tencent_secret_key
 # TENCENT_TTS_VOICE_ZH=101001
@@ -101,7 +107,7 @@ npm run dev
 
 | Environment Variable | 用途 |
 | --- | --- |
-| `GEM_API_KEY` | 可选，仅 OCR 图片识词使用 |
+| `OPENCODE_API_KEY` | 可选，仅 OCR 图片识词使用；兼容旧名 `GEM_API_KEY` |
 | `TENCENT_SECRET_ID` | 可选，腾讯云 TTS 启用时必需 |
 | `TENCENT_SECRET_KEY` | 可选，腾讯云 TTS 启用时必需 |
 | `TENCENT_TTS_VOICE_ZH` | 可选，覆盖中文精品音色，默认 `101001` |
@@ -155,4 +161,4 @@ curl -i -X POST https://<your-domain>/api/tts-tencent -H 'Content-Type: applicat
 ## 🛡️ License / 致谢
 
 本项目用于学习和个人部署场景，License 信息按 fork 或部署需求补充。
-Thanks to Gemini OCR、Microsoft Edge TTS、腾讯云 TTS、MiniMax、GLM TTS、Vercel 和开源前端生态。
+Thanks to opencode-go、DeepSeek、Microsoft Edge TTS、腾讯云 TTS、MiniMax、GLM TTS、Vercel 和开源前端生态。

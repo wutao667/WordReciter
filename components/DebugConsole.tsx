@@ -121,7 +121,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
   const runApiTest = async () => {
     setIsTestingApi(true);
-    addLog('info', '启动 Gemini 接口代理自检 (gemini-3-flash-preview)...');
+    addLog('info', '启动 AI 接口代理自检 (deepseek-v4.1-flash)...');
     const result = await testGeminiConnectivity();
     setApiStatus(result);
     if (result.success) addLog('success', `接口自检正常 (${result.latency}ms)`);
@@ -210,7 +210,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
 
         {/* Tab switcher */}
         <div className="flex px-8 border-b bg-white shrink-0 overflow-x-auto no-scrollbar">
-          <button onClick={() => setActiveTab('api')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Gemini 核心代理</button>
+          <button onClick={() => setActiveTab('api')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>AI 核心代理</button>
           <button onClick={() => setActiveTab('vision')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'vision' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>视觉诊断 (Real OCR)</button>
           <button onClick={() => setActiveTab('tts')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'tts' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>语音合成实验室</button>
           <button onClick={() => setActiveTab('env')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${activeTab === 'env' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>运行环境</button>
@@ -224,9 +224,9 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
                   <div className="flex items-center gap-3">
                     <Globe className="w-5 h-5 text-indigo-500" />
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Vercel Proxy (Gemini) 连通性</h3>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Vercel Proxy 连通性</h3>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">此测试验证前端是否能正确调用后端的 /api/ocr 代理，以及后端是否能成功通过 GEM_API_KEY 握手 Google Gemini 平台。</p>
+                  <p className="text-xs text-slate-500 leading-relaxed">此测试验证前端是否能正确调用后端的 /api/ocr 代理，以及后端是否能成功通过 OPENCODE_API_KEY 连接 opencode-go 平台。</p>
                   <button onClick={runApiTest} disabled={isTestingApi} className="w-full py-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-xs uppercase tracking-widest hover:border-indigo-500 hover:text-indigo-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
                     {isTestingApi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />} 
                     启动 API 代理自检
@@ -307,7 +307,7 @@ const DebugConsole: React.FC<DebugConsoleProps> = ({ onClose }) => {
                       {visionSteps.length === 0 ? (
                         <div className="py-12 text-center text-slate-400">
                           <Info className="w-10 h-10 mx-auto opacity-20 mb-3" />
-                          <p className="text-[10px] font-bold uppercase tracking-widest">等待启动诊断 (Gemini Vision)</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest">等待启动视觉诊断</p>
                         </div>
                       ) : (
                         visionSteps.map((step, i) => (

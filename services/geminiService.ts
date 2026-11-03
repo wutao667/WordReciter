@@ -62,7 +62,7 @@ export const testGeminiConnectivity = async (): Promise<{ success: boolean; mess
 
     return { 
       success: true, 
-      message: data.message || "Gemini API 连接成功", 
+      message: data.message || "AI 接口连接成功", 
       latency: Date.now() - start 
     };
   } catch (error: any) {
@@ -429,7 +429,7 @@ export const diagnoseVisionProcess = async (
 ) => {
   const start = Date.now();
   try {
-    onProgress('Proxy Handshake', 'loading', '正在测试代理连接 (GEM_API_KEY)...');
+    onProgress('Proxy Handshake', 'loading', '正在测试代理连接 (OPENCODE_API_KEY)...');
     const data = await fetchJsonResponse(PROXY_OCR_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
