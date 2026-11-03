@@ -4,7 +4,10 @@ export const config = {
 
 const DEFAULT_BASE_URL = 'https://opencode.ai/zen/go/v1/chat/completions';
 const DEFAULT_MODEL = 'deepseek-v4.1-flash';
-const DEFAULT_MAX_TOKENS = 2000;
+// 该模型是 reasoning 模型：推理内容同样占用 max_tokens 额度。
+// 额度不足时推理耗尽预算，正文 content 会变成空字符串，OCR 表现为「未识别到单词」。
+// 因此按模型支持的最大值 64000 配置，保证推理 + 单词输出都有足够空间。
+const DEFAULT_MAX_TOKENS = 64000;
 const DEFAULT_CONTEXT_WINDOW = 1048576;
 const DEFAULT_TIMEOUT_MS = 55000;
 const SESSION_ID = 'wordreciter-ocr';
@@ -15,7 +18,7 @@ type UpstreamMessage = {
 };
 
 type UpstreamResponse = {
-  choices?: Array<{ message?: UpstreamMessage }>;
+  choices?: Array<{ message?: UpstreamMessage; finish_reason?: unknown }>;
 };
 
 class UpstreamHttpError extends Error {
@@ -203,6 +206,16 @@ export default async function handler(req: Request) {
     );
     const content = response.choices?.[0]?.message?.content;
     const text = typeof content === 'string' ? content : '';
+    const finishReason = response.choices?.[0]?.finish_reason;
+
+    // 正文为空但上游明确因长度截断而结束，说明是 token 预算不足（推理占满额度），
+    // 不能当成「图里没有词」反馈给用户。
+    if (!text.trim() && finishReason === 'length') {
+      return failureResponse(
+        'AI 推理占满了输出额度，导致未能生成单词列表。请稍后重试，或联系维护者提高 OPENCODE_MAX_TOKENS。',
+        502,
+      );
+    }
 
     return jsonResponse({
       success: true,

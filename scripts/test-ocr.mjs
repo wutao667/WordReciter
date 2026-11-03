@@ -53,7 +53,7 @@ test('OCR request builds one JPEG data URL and the expected non-streaming body',
   assert.equal(imagePart.image_url.url, 'data:image/jpeg;base64,QUJD');
   assert.equal((imagePart.image_url.url.match(/data:image\/jpeg;base64,/g) || []).length, 1);
   assert.equal(body.model, 'deepseek-v4.1-flash');
-  assert.equal(body.max_tokens, 2000);
+  assert.equal(body.max_tokens, 64000);
   assert.equal(body.context_window, 1048576);
   assert.equal(body.stream, false);
   assert.equal(upstream.headers['x-opencode-session'], 'wordreciter-ocr');
