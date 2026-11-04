@@ -10,14 +10,16 @@ const DEFAULT_BASE_URL = 'https://opencode.ai/zen/go/v1/chat/completions';
 const DEFAULT_MODEL = 'deepseek-v4.1-flash';
 // 该模型是 reasoning 模型：推理内容同样占用 max_tokens 额度。
 // 额度不足时推理会耗尽预算，正文 content 变成空字符串，OCR 表现为「未识别到单词」。
-// 按模型支持的上限配置，保证推理 + 单词输出都有足够空间。
-const DEFAULT_MAX_TOKENS = 64000;
+// 16k 足以容纳数百行 OCR 正文并给推理留出显著余量，同时限制异常长推理的最坏预算；
+// 不同模型所需预算可能不同，可用 OPENCODE_MAX_TOKENS 覆盖，不能贸然降回 2k。
+export const DEFAULT_MAX_TOKENS = 16000;
 const DEFAULT_CONTEXT_WINDOW = 1048576;
 // 必须明显小于 vercel.json 的 maxDuration(60)，这样即使上游很慢，
-// 也能由我们自己返回结构化的 JSON 错误，而不是被平台直接掐断成非 JSON 的 504。
-const DEFAULT_TIMEOUT_MS = 55000;
+// 也能给冷启动、重试和响应序列化留出余量，由我们返回结构化 JSON 错误。
+export const DEFAULT_TIMEOUT_MS = 45000;
 const MAX_IMAGE_CHARS = 4 * 1024 * 1024;
 const SESSION_ID = 'wordreciter-ocr';
+const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
 
 type UpstreamMessage = {
   content?: unknown;
@@ -69,8 +71,16 @@ const positiveInteger = (value: string | undefined, fallback: number): number =>
 };
 
 const normalizeImageDataUrl = (image: string): string => {
-  const base64 = image.trim().replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '');
-  return `data:image/jpeg;base64,${base64}`;
+  const trimmed = image.trim();
+  if (!trimmed.startsWith('data:')) return `data:image/jpeg;base64,${trimmed}`;
+
+  const match = /^data:image\/(jpeg|jpg|png|webp);base64,([\s\S]+)$/i.exec(trimmed);
+  if (!match) {
+    throw new Error('INVALID_IMAGE_DATA_URL');
+  }
+
+  const mime = match[1].toLowerCase() === 'jpg' ? 'jpeg' : match[1].toLowerCase();
+  return `data:image/${mime};base64,${match[2]}`;
 };
 
 const languageInstruction = (languages: unknown): string => {
@@ -84,15 +94,9 @@ const languageInstruction = (languages: unknown): string => {
   return instruction;
 };
 
-const systemPrompt = (languages: unknown): string => `你是一个专业的 OCR 插件。请提取图片中所有的${languageInstruction(languages)}。每行只输出一个单词或短语。
-
-【强制规则】：
-1. 只输出单词列表，每行一个。
-2. 严禁输出任何解释、道歉、描述或对话。
-3. 如果图中没有符合条件的词汇，请直接返回一个完全为空的字符串。
-4. 严禁出现“图片中不包含...”、“没找到...”、“图中没有...”等任何类似的说明文字。
-5. 忽略数字、标点、Markdown 格式。
-6. 不要输出思考过程，不要输出任何分析步骤，只输出最终单词列表。`;
+const systemPrompt = (languages: unknown): string =>
+  `提取图片中的${languageInstruction(languages)}。仅输出结果，每行一个单词或短语；` +
+  '忽略数字、标点和 Markdown。不得解释、描述、道歉或输出思考过程；没有符合项时输出空字符串。';
 
 const mapUpstreamError = (res: any, error: unknown) => {
   if (error instanceof UpstreamHttpError) {
@@ -122,6 +126,7 @@ const requestUpstream = async (
   maxTokens: number,
   contextWindow: number,
   timeoutMs: number,
+  reasoningEffort?: string,
   image?: string,
   languages?: unknown,
 ): Promise<UpstreamResponse> => {
@@ -132,7 +137,7 @@ const requestUpstream = async (
         {
           role: 'user',
           content: [
-            { type: 'text', text: '请识别这张图片，并严格按照系统指令输出最终单词列表。' },
+            { type: 'text', text: '提取图片文字。' },
             { type: 'image_url', image_url: { url: normalizeImageDataUrl(image) } },
           ],
         },
@@ -146,28 +151,41 @@ const requestUpstream = async (
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'x-opencode-session': SESSION_ID,
-      },
-      body: JSON.stringify({
+    // reasoning_effort 不是 opencode-go 已核实支持的字段。仅在显式配置时发送；
+    // 如果上游以 400 拒绝，去掉该字段重试一次。两次请求共享同一截止时间，
+    // 避免兼容性重试把最坏等待时间翻倍。
+    const efforts = reasoningEffort ? [reasoningEffort, undefined] : [undefined];
+    for (const effort of efforts) {
+      const payload: Record<string, unknown> = {
         model,
         messages,
         max_tokens: maxTokens,
         context_window: contextWindow,
         stream: false,
-      }),
-      signal: controller.signal,
-    });
+      };
+      if (effort) payload.reasoning_effort = effort;
 
-    if (!response.ok) {
+      const response = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'x-opencode-session': SESSION_ID,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      if (response.ok) {
+        return await response.json() as UpstreamResponse;
+      }
+      if (response.status === 400 && effort) {
+        await response.body?.cancel();
+        continue;
+      }
       throw new UpstreamHttpError(response.status, imageRequest);
     }
-
-    return await response.json() as UpstreamResponse;
+    throw new UpstreamHttpError(400, imageRequest);
   } finally {
     clearTimeout(timeout);
   }
@@ -186,12 +204,18 @@ export default async function handler(req: any, res: any) {
   }
 
   const image = typeof body?.image === 'string' ? body.image : '';
+  let normalizedImage = image;
   if (body?.type !== 'test') {
     if (image.trim().length === 0) {
       return failureResponse(res, '未接收到图像数据 (image base64 is missing)', 400);
     }
     if (image.length > MAX_IMAGE_CHARS) {
-      return failureResponse(res, '图片数据过大，请压缩后重试。', 413);
+      return failureResponse(res, '图片数据过大（base64 上限 4 MiB），请裁剪或压缩后重试。', 413);
+    }
+    try {
+      normalizedImage = normalizeImageDataUrl(image);
+    } catch {
+      return failureResponse(res, '图片格式无效；请上传 JPEG、PNG 或 WebP 图片。', 400);
     }
   }
 
@@ -204,11 +228,20 @@ export default async function handler(req: any, res: any) {
   const model = process.env.OPENCODE_MODEL || DEFAULT_MODEL;
   const maxTokens = positiveInteger(process.env.OPENCODE_MAX_TOKENS, DEFAULT_MAX_TOKENS);
   const contextWindow = positiveInteger(process.env.OPENCODE_CONTEXT_WINDOW, DEFAULT_CONTEXT_WINDOW);
-  const timeoutMs = positiveInteger(process.env.OPENCODE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+  // 环境变量可缩短等待时间，但不能突破安全上限，否则会重新贴近平台 60 秒硬截止线。
+  const timeoutMs = Math.min(
+    positiveInteger(process.env.OPENCODE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
+    DEFAULT_TIMEOUT_MS,
+  );
+  const configuredEffort = process.env.OPENCODE_REASONING_EFFORT?.trim().toLowerCase();
+  if (configuredEffort && !REASONING_EFFORTS.has(configuredEffort)) {
+    return failureResponse(res, 'OPENCODE_REASONING_EFFORT 只能是 low、medium 或 high。', 500);
+  }
+  const reasoningEffort = configuredEffort || undefined;
 
   if (body.type === 'test') {
     try {
-      await requestUpstream(apiKey, model, baseUrl, maxTokens, contextWindow, timeoutMs);
+      await requestUpstream(apiKey, model, baseUrl, maxTokens, contextWindow, timeoutMs, reasoningEffort);
       return jsonResponse(res, 200, {
         success: true,
         message: `opencode-go API 握手成功（${model}）`,
@@ -226,21 +259,26 @@ export default async function handler(req: any, res: any) {
       maxTokens,
       contextWindow,
       timeoutMs,
-      image,
+      reasoningEffort,
+      normalizedImage,
       body.languages,
     );
     const content = response.choices?.[0]?.message?.content;
     const text = typeof content === 'string' ? content : '';
     const finishReason = response.choices?.[0]?.finish_reason;
 
-    // 正文为空但上游明确因长度截断而结束，说明是 token 预算不足（推理占满额度），
-    // 不能当成「图里没有词」反馈给用户。
-    if (!text.trim() && finishReason === 'length') {
+    // length 表示结果不完整；即使已有正文也不能把缺词的部分列表静默当成成功。
+    if (finishReason === 'length') {
       return failureResponse(
         res,
-        'AI 推理占满了输出额度，导致未能生成单词列表。请稍后重试，或联系维护者提高 OPENCODE_MAX_TOKENS。',
+        text.trim()
+          ? 'AI 输出达到额度上限，单词列表可能不完整。请裁剪图片后重试，或联系维护者提高 OPENCODE_MAX_TOKENS。'
+          : 'AI 推理占满了输出额度，未能生成单词列表。请重试或裁剪图片；持续失败请联系维护者提高 OPENCODE_MAX_TOKENS。',
         502,
       );
+    }
+    if (typeof content !== 'string') {
+      return failureResponse(res, 'AI 返回格式异常，未收到可解析的单词列表，请稍后重试。', 502);
     }
 
     return jsonResponse(res, 200, {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import handler from '../api/ocr.ts';
+import handler, { DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT_MS } from '../api/ocr.ts';
 
 const originalFetch = globalThis.fetch;
 const managedEnv = [
@@ -10,6 +10,7 @@ const managedEnv = [
   'OPENCODE_MAX_TOKENS',
   'OPENCODE_CONTEXT_WINDOW',
   'OPENCODE_TIMEOUT_MS',
+  'OPENCODE_REASONING_EFFORT',
 ];
 const originalEnv = Object.fromEntries(managedEnv.map((name) => [name, process.env[name]]));
 
@@ -85,7 +86,7 @@ test('OCR request builds one JPEG data URL and the expected non-streaming body',
   assert.equal(imagePart.image_url.url, 'data:image/jpeg;base64,QUJD');
   assert.equal((imagePart.image_url.url.match(/data:image\/jpeg;base64,/g) || []).length, 1);
   assert.equal(body.model, 'deepseek-v4.1-flash');
-  assert.equal(body.max_tokens, 64000);
+  assert.equal(body.max_tokens, 16000);
   assert.equal(body.context_window, 1048576);
   assert.equal(body.stream, false);
   assert.equal(upstream.headers['x-opencode-session'], 'wordreciter-ocr');
@@ -110,7 +111,52 @@ test('an already-prefixed input is normalized without a double prefix', async ()
     return okResponse();
   };
   await invoke({ image: 'data:image/png;base64,QUJD' });
-  assert.equal(url, 'data:image/jpeg;base64,QUJD');
+  assert.equal(url, 'data:image/png;base64,QUJD');
+});
+
+test('unsupported image data URL returns JSON 400 without calling upstream', async () => {
+  globalThis.fetch = async () => assert.fail('fetch must not be called');
+  const result = await invoke({ image: 'data:image/gif;base64,QUJD' });
+  assert.equal(result.status, 400);
+  assert.equal(result.headers['content-type'], 'application/json');
+  assert.match(result.body.error, /JPEG、PNG 或 WebP/);
+});
+
+test('reasoning_effort is absent unless explicitly configured', async () => {
+  let upstreamBody;
+  globalThis.fetch = async (_url, init) => {
+    upstreamBody = JSON.parse(init.body);
+    return okResponse();
+  };
+  await invoke({ image: 'QUJD' });
+  assert.equal(Object.hasOwn(upstreamBody, 'reasoning_effort'), false);
+});
+
+test('configured reasoning_effort is sent upstream', async () => {
+  process.env.OPENCODE_REASONING_EFFORT = 'low';
+  let upstreamBody;
+  globalThis.fetch = async (_url, init) => {
+    upstreamBody = JSON.parse(init.body);
+    return okResponse();
+  };
+  await invoke({ image: 'QUJD' });
+  assert.equal(upstreamBody.reasoning_effort, 'low');
+});
+
+test('an upstream 400 retries once without reasoning_effort and succeeds', async () => {
+  process.env.OPENCODE_REASONING_EFFORT = 'low';
+  const attempts = [];
+  globalThis.fetch = async (_url, init) => {
+    attempts.push(JSON.parse(init.body));
+    return attempts.length === 1
+      ? new Response('unsupported field', { status: 400 })
+      : okResponse();
+  };
+  const result = await invoke({ image: 'QUJD' });
+  assert.equal(result.status, 200);
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[0].reasoning_effort, 'low');
+  assert.equal(Object.hasOwn(attempts[1], 'reasoning_effort'), false);
 });
 
 test("type:'test' sends text only and reports the configured model", async () => {
@@ -200,6 +246,48 @@ test('empty content with finish_reason=length reports budget exhaustion, not emp
   assert.doesNotMatch(result.body.error, /未识别到/);
 });
 
+test('non-empty content with finish_reason=length is rejected instead of returning a partial list', async () => {
+  globalThis.fetch = async () => okResponse({
+    choices: [{ message: { content: 'apple\nbanana' }, finish_reason: 'length' }],
+  });
+  const result = await invoke({ image: 'QUJD' });
+  assert.equal(result.status, 502);
+  assert.equal(result.body.success, false);
+  assert.match(result.body.error, /不完整/);
+});
+
+test('defaults cap generation at 16k and leave 15 seconds before the Vercel deadline', () => {
+  assert.equal(DEFAULT_MAX_TOKENS, 16000);
+  assert.equal(DEFAULT_TIMEOUT_MS, 45000);
+  assert.equal(60_000 - DEFAULT_TIMEOUT_MS, 15_000);
+});
+
+test('an oversized timeout override is capped at the 45-second safety deadline', async () => {
+  process.env.OPENCODE_TIMEOUT_MS = '55000';
+  const originalSetTimeout = globalThis.setTimeout;
+  let scheduledDelay;
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    scheduledDelay = delay;
+    return originalSetTimeout(callback, delay, ...args);
+  };
+  globalThis.fetch = async () => okResponse();
+  try {
+    const result = await invoke({ image: 'QUJD' });
+    assert.equal(result.status, 200);
+    assert.equal(scheduledDelay, 45000);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test('a malformed successful upstream response returns a useful JSON error', async () => {
+  globalThis.fetch = async () => okResponse({ choices: [] });
+  const result = await invoke({ image: 'QUJD' });
+  assert.equal(result.status, 502);
+  assert.equal(result.body.success, false);
+  assert.match(result.body.error, /格式异常/);
+});
+
 test('timeout aborts upstream and maps to 504', async () => {
   process.env.OPENCODE_TIMEOUT_MS = '5';
   globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => {
@@ -207,6 +295,8 @@ test('timeout aborts upstream and maps to 504', async () => {
   });
   const result = await invoke({ image: 'QUJD' });
   assert.equal(result.status, 504);
+  assert.equal(result.headers['content-type'], 'application/json');
+  assert.equal(result.body.success, false);
   assert.match(result.body.error, /图片|重试/);
 });
 
